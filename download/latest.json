@@ -1,10 +1,10 @@
 {
   "name": "ChatPilot 私信助手",
-  "version": "3.0.8",
-  "url": "download/ChatPilotSetup-3.0.8.exe",
-  "md5": "f24be963cc24b926d922a4c15e58ef87",
-  "size": 2862073,
+  "version": "3.0.9",
+  "url": "download/ChatPilotSetup-3.0.9.exe",
+  "md5": "023e68fe17664ad4f36a6a0e62c8ac1e",
+  "size": 2861980,
   "publishedAt": "2026-11-27",
-  "notes": "侧边栏头部刷新候选按钮（⟳）移除；候选生成入口保留候选区「重新生成」按钮与 Alt+G 快捷键",
+  "notes": "侧边栏头部「拆成独立小窗」按钮（⧉）移除；头部只剩设置入口",
   "page": "index.html"
 }
