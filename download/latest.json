@@ -1,0 +1,10 @@
+{
+  "name": "ChatPilot 私信助手",
+  "version": "3.0.5",
+  "url": "download/ChatPilotSetup-3.0.5.exe",
+  "md5": "88d3bf05ee1f30d7143c78b1724408ae",
+  "size": 2858242,
+  "publishedAt": "2026-11-27",
+  "notes": "看板站点迁移到新域名 chatpilot-board2（老站点账号受限无法重发）；扩展看板入口同步指向新址",
+  "page": "index.html"
+}

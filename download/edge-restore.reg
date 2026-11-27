@@ -1,0 +1,11 @@
+Windows Registry Editor Version 5.00
+
+; ============================================
+; 还原 Edge 默认（撤销 ChatPilot 的两条策略）
+; 只删除 ChatPilot 写入的这两个值，不动其他任何设置
+; 生效：双击导入 → 完全退出 Edge → 重新打开
+; ============================================
+
+[HKEY_CURRENT_USER\Software\Policies\Microsoft\Edge]
+"SleepingTabsBlockedForUrls"=-
+"EfficiencyModeEnabled"=-

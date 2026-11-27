@@ -1,0 +1,17 @@
+Windows Registry Editor Version 5.00
+
+; ============================================
+; ChatPilot 一键设置 Edge（普通用户版）
+; 作用：
+;   1. 抖音私信页 / TikTok 私信页永不休眠（睡眠标签页例外）
+;   2. 关闭 Edge 效率模式（台式机无电池时开着效率模式会「始终生效」，
+;      会卡顿后台页面，导致 ChatPilot 假死）
+; 生效：双击导入 → 完全退出 Edge（含托盘图标）→ 重新打开
+; 验证：地址栏输入 edge://policy ，能看到这两条策略即成功
+; 说明：导入后 Edge 设置页会显示「由你的组织管理」，这是策略生效的正常表现
+; 还原：双击同目录下的「2-还原Edge默认.reg」
+; ============================================
+
+[HKEY_CURRENT_USER\Software\Policies\Microsoft\Edge]
+"SleepingTabsBlockedForUrls"="[\"https://www.douyin.com/chat*\",\"https://www.tiktok.com/messages*\"]"
+"EfficiencyModeEnabled"=dword:00000000
