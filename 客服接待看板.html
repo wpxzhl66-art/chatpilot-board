@@ -1031,10 +1031,15 @@ async function load() {
 /* --------------------------------------------------------- 在线窗口（v1.4） */
 /* 数据源：agent_bindings（v2.24.0 起「员工身份 = 显式绑定」）。
  * 一行 = 一个正在使用的浏览器窗口，直接回答「谁在用哪个窗口」。
- * 在线 = 最近心跳距今 ≤ ONLINE_MS（15 分钟；扩展每分钟对账一次，留足容差）；
- * 超过即视为离线（窗口关了 / 扩展停用 / 断网）。 */
-const ONLINE_MS = 15 * 60 * 1000;
+ * 在线 = 最近心跳距今 ≤ ONLINE_MS。
+ * v3.0.13（用户定稿 2026-11-28）：阈值收紧到 1 分钟——扩展心跳已同步加密到
+ * 30 秒一跳（binding.js），活着的窗口两跳间最大空隙 ~60 秒不会误翻离线；
+ * 窗口关闭/断网后 1 分钟即翻离线，不再有 15 分钟「假在线」。
+ * 配套：本地 10 秒重渲染（ONLINE_RERENDER_MS），状态跨过阈值后 ≤10 秒可见，
+ * 不增加云端请求量（复用已拉取的 state.bindings 现算）。 */
+const ONLINE_MS = 60 * 1000;
 const ONLINE_POLL_MS = 60 * 1000;
+const ONLINE_RERENDER_MS = 10 * 1000;
 
 /* --------- 会话三态判定（v2.0）—— 全看板唯一裁决点 ---------
  * active: 最近活动 ≤10 分钟（扩展还在扫到，视为接待中）
@@ -1326,6 +1331,16 @@ setInterval(() => {
   loadBindings();
   if (++statTick % STAT_POLL_EVERY === 0) { loadStats(); loadUnassigned(); }
 }, ONLINE_POLL_MS);
+
+/* v3.0.13：在线状态的本地及时重渲染——阈值只有 1 分钟，等 60 秒的网络轮询
+ * 才翻状态太迟钝。这里每 10 秒用已拉取的 state.bindings 现算重画（纯渲染，
+ * 不发请求）。用户正操作员工筛选下拉时跳过一轮，避免 innerHTML 重建把
+ * 展开中的下拉收起。 */
+setInterval(() => {
+  if (document.hidden || !Auth.token || $('#appView').hidden) return;
+  if (document.activeElement === $('#onFilter')) return;
+  if ((state.bindings || []).length) renderBindings();
+}, ONLINE_RERENDER_MS);
 
 /* --------------------------------------------------------- 员工咨询量 */
 /* 数据源（v1.2）：consult_daily + lead_captures 两张统计表，经 board_stats

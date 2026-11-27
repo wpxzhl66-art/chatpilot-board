@@ -1,10 +1,10 @@
 {
   "name": "ChatPilot 私信助手",
-  "version": "3.0.9",
-  "url": "download/ChatPilotSetup-3.0.9.exe",
-  "md5": "023e68fe17664ad4f36a6a0e62c8ac1e",
-  "size": 2861980,
-  "publishedAt": "2026-11-27",
-  "notes": "侧边栏头部「拆成独立小窗」按钮（⧉）移除；头部只剩设置入口",
+  "version": "3.0.13",
+  "url": "download/ChatPilotSetup-3.0.13.exe",
+  "md5": "78278e6fecdfefb58df40b0a7da089ac",
+  "size": 2877004,
+  "publishedAt": "2026-11-28",
+  "notes": "在线判定收紧到 1 分钟（心跳 30 秒 + 看板 10 秒及时刷新）；扩展更新后自动刷新旧页签；修复识别串号；本窗口名称就地改名；人设下拉移位",
   "page": "index.html"
 }
