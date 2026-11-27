@@ -1,10 +1,10 @@
 {
   "name": "ChatPilot 私信助手",
-  "version": "3.0.7",
-  "url": "download/ChatPilotSetup-3.0.7.exe",
-  "md5": "dcc8a852320f3bf9be70529b2a2c85a8",
-  "size": 2861735,
+  "version": "3.0.8",
+  "url": "download/ChatPilotSetup-3.0.8.exe",
+  "md5": "f24be963cc24b926d922a4c15e58ef87",
+  "size": 2862073,
   "publishedAt": "2026-11-27",
-  "notes": "弹窗入口调整：「拆成独立小窗」改为「数据看板」（新标签页打开在线看板）；侧边栏头部分离按钮保留",
+  "notes": "侧边栏头部刷新候选按钮（⟳）移除；候选生成入口保留候选区「重新生成」按钮与 Alt+G 快捷键",
   "page": "index.html"
 }
