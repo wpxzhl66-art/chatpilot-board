@@ -233,6 +233,13 @@
   .sc.b3now{border-left:3px solid #16a34a}
   .sc.b3idle{border-left:3px solid #d97706}
   .b3foot{font-size:11.5px;color:var(--tx3);padding:8px 14px;border-top:1px dashed var(--line)}
+  /* 记录管理（v1.8）：三列板工具条 + 卡片行内操作 */
+  .b3bar{grid-column:1/-1;display:flex;align-items:center;gap:10px}
+  .sc .b3edit,.sc .b3del{cursor:pointer;user-select:none;font-size:11.5px;padding:2px 8px;border:1px solid var(--line);border-radius:6px;color:var(--tx2)}
+  .sc .b3edit:hover{background:var(--card);color:var(--tx)}
+  .sc .b3del:hover{background:var(--red-soft);color:#991b1b;border-color:#fbd5d5}
+  .ocard .oops{display:flex;flex-direction:column;gap:6px;flex:none}
+  .ocard .oops .btn{padding:3px 9px;font-size:11.5px}
 
   .chart-scroll{overflow-x:auto;overflow-y:hidden;padding-bottom:4px}
   .chart-scroll svg{display:block}
@@ -471,7 +478,7 @@
 
     <div class="login-foot">
       忘记密码请联系管理员重置<br>
-      <span style="opacity:.7">v1.7 · 只读看板，不提供任何数据修改</span>
+      <span style="opacity:.7">v1.8 · 管理员可管理窗口 / 接入 / 留资记录（操作全部留审计）</span>
     </div>
   </div>
 </div>
@@ -538,6 +545,12 @@
     <!-- 会话三列板（v2.0）：数据来自 board_claims 时间分桶。
          「待接待（粉丝排队）」当前数据推不出来，第一列只放待归属，不造假数字。 -->
     <section class="board3" id="board3">
+      <div class="b3bar">
+        <span class="b3t">接入记录</span>
+        <span class="sub">按最近活动分桶显示，每列取每个粉丝最近的一行</span>
+        <div class="grow"></div>
+        <button class="btn primary" id="btnClaimAdd" style="display:none" title="手动登记一条接入记录">＋ 新增接入记录</button>
+      </div>
       <div class="b3col">
         <div class="b3h"><span class="b3t">待处理</span><span class="b3n pend" id="nPend"></span></div>
         <div class="b3list" id="bPend"></div>
@@ -563,6 +576,7 @@
         <div class="ostats" id="onStats"></div>
         <select class="btn" id="onFilter" title="按员工筛选窗口" style="min-width:150px"></select>
         <button class="btn" id="btnOnReload">刷新</button>
+        <button class="btn primary" id="btnBindingAdd" style="display:none" title="手动登记「员工 ↔ 浏览器窗口」绑定">＋ 新增窗口</button>
       </div>
       <div class="card-b" style="padding-top:12px">
         <div class="ogrid" id="onGrid"></div>
@@ -673,7 +687,8 @@
     </details>
 
     <div class="foot">
-      只读看板 · 数据经服务端校验后返回 · 每行代表「某客服在某台浏览器上接待过某位粉丝」<br>
+      记录管理（v1.8）：管理员可在「在线窗口 / 接入记录 / 留资明细」直接 新增 / 编辑 / 删除，操作全部写入服务端审计<br>
+      数据经服务端校验后返回 · 每行代表「某客服在某台浏览器上接待过某位粉丝」 ·
       同一粉丝被 2 个及以上客服编号接待过，会在「重复承接提醒」中标红列出
     </div>
   </div>
@@ -715,6 +730,19 @@
     <div class="modal-ops">
       <button class="btn" id="pwdCancel">取消</button>
       <button class="btn primary" id="pwdOk">保存</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal" id="recModal">
+  <div class="modal-card">
+    <h3 id="recTitle">编辑记录</h3>
+    <p id="recDesc"></p>
+    <div class="msg" id="recMsg"></div>
+    <div id="recFields"></div>
+    <div class="modal-ops">
+      <button class="btn" id="recCancel">取消</button>
+      <button class="btn primary" id="recOk">保存</button>
     </div>
   </div>
 </div>
@@ -1092,6 +1120,9 @@ function staffStatusTag(b) {
 
 function renderBindings() {
   const now = Date.now();
+  const admin = Auth.isAdmin;
+  const ba = $('#btnBindingAdd');
+  if (ba) ba.style.display = admin ? '' : 'none';   // v1.8：新增窗口入口仅管理员可见
   const all = (state.bindings || []).map((b) => {
     const last = b.last_seen_at ? parseTs(b.last_seen_at) : 0;
     return { ...b, lastMs: last, on: last > 0 && (now - last) <= ONLINE_MS };
@@ -1156,12 +1187,19 @@ function renderBindings() {
       + '<div class="oav" style="background:' + c + '">' + ini + '</div>'
       + '<div class="oi"><div class="n">' + esc(name) + staffStatusTag(b) + '</div>'
       + '<div class="t"><b>' + esc(win) + '</b> · ' + (b.on ? '在线 · ' : '离线 · ') + t2 + '</div></div>'
+      + (admin ? '<div class="oops">'
+        + '<button class="btn sm" data-bop="edit" data-bid="' + esc(b.browser_id || '') + '">编辑</button>'
+        + '<button class="btn sm danger" data-bop="del" data-bid="' + esc(b.browser_id || '') + '">删除</button>'
+        + '</div>' : '')
       + '<span class="od"></span></div>';
   }).join('');
 }
 
-/* 点卡片 = 按该员工筛选（再点一次取消），用于「按员工快速定位窗口」 */
+/* 点卡片 = 按该员工筛选（再点一次取消），用于「按员工快速定位窗口」；
+ * v1.8：卡片上的 编辑/删除 按钮优先处理（不触发筛选）。 */
 $('#onGrid').addEventListener('click', (e) => {
+  const bop = e.target.closest ? e.target.closest('[data-bop]') : null;
+  if (bop && bop.dataset.bop) { e.stopPropagation(); bindingOp(bop.dataset.bop, bop.dataset.bid); return; }
   const card = e.target.closest?.('.ocard');
   if (!card) return;
   const a = card.dataset.agent || '';
@@ -1201,12 +1239,17 @@ function b3Card(r, kind) {
   const last = r.last_active_at || r.first_seen_at;
   const who = String(r.staff_name || r.agent_id || '').trim() || '未记录员工';
   const st = staffStatusTag({ staff_status: r.staff_status });
+  /* v1.8：行级 编辑/删除（需云端迁移补的 id；管理员可见） */
+  const ops = (Auth.isAdmin && r.id)
+    ? '<span class="b3edit" data-cop="edit" data-cid="' + esc(r.id) + '">编辑</span>'
+      + '<span class="b3del" data-cop="del" data-cid="' + esc(r.id) + '">删除</span>'
+    : '';
   return '<div class="sc' + (kind === 'active' ? ' b3now' : kind === 'idle' ? ' b3idle' : '') + '">'
     + '<div class="sc-h"><span class="ph">@' + esc(r.peer_key || '') + '</span>'
     + (name ? '<b title="' + esc(name) + '">' + esc(name) + '</b>' : '')
     + (kind === 'idle' ? ' <span class="tag live">超时</span>' : '') + st + '</div>'
     + '<div class="sc-m">' + esc(who) + ' · 最近活动 ' + esc(fmtAgo(last) || '时间未记录') + '</div>'
-    + '<div class="sc-a"><span class="b3copy" data-v="' + esc(r.peer_key || '') + '" title="复制 @ID">复制@ID</span></div>'
+    + '<div class="sc-a"><span class="b3copy" data-v="' + esc(r.peer_key || '') + '" title="复制 @ID">复制@ID</span>' + ops + '</div>'
     + '</div>';
 }
 
@@ -1228,6 +1271,8 @@ function renderBoard3() {
   const sec = document.getElementById('board3');
   if (!sec) return;
   const now = Date.now();
+  const bca = document.getElementById('btnClaimAdd');
+  if (bca) bca.style.display = Auth.isAdmin ? '' : 'none';   // v1.8：新增接入记录入口仅管理员可见
   const g = board3Buckets(now);
   const pend = (state.unassigned || []).reduce((s, r) => s + Number(r.claims || 0), 0);
   const nPend = document.getElementById('nPend');
@@ -1261,10 +1306,12 @@ function renderBoard3() {
   }
 }
 
-/* 复制按钮事件委托（卡片是重画的，挂容器上） */
+/* 复制按钮事件委托（卡片是重画的，挂容器上）；v1.8：接入记录 编辑/删除 同走这里 */
 document.getElementById('board3')?.addEventListener('click', (e) => {
   const t = e.target && e.target.closest ? e.target.closest('.b3copy') : null;
-  if (t) b3Copy(t);
+  if (t) { b3Copy(t); return; }
+  const cop = e.target && e.target.closest ? e.target.closest('[data-cop]') : null;
+  if (cop && cop.dataset.cop) claimOp(cop.dataset.cop, cop.dataset.cid);
 });
 
 /* --------------------------------------------- 待归属记录（v1.4） */
@@ -1320,8 +1367,8 @@ function renderUnassigned() {
     + '<th class="aright">有效咨询</th><th class="aright">留资</th><th>最近活动</th></tr></thead>'
     + '<tbody>' + body + '</tbody></table>'
     + '<div class="muted" style="font-size:11.5px;padding:8px 2px">'
-    + '处理方式：在管理台把员工补进名单、或把这些历史编号合并到正确员工（board_assign_legacy）。'
-    + '看板只读，不在这里改数据。</div>';
+    + '处理方式：在「账号管理 → 员工名单」把员工补进名单；'
+    + '或用上方「＋ 新增接入记录」把历史粉丝重新登记到正确员工名下。</div>';
 }
 
 $('#btnOnReload').addEventListener('click', () => { loadBindings(); });
@@ -1461,6 +1508,9 @@ $('#leadType').addEventListener('change', (e) => {
   loadLeads(false);
 });
 $('#leadWrap').addEventListener('click', (e) => {
+  /* v1.8：删除按钮优先处理 */
+  const del = e.target.closest ? e.target.closest('[data-lid]') : null;
+  if (del && del.dataset.lid) { leadOp(del.dataset.lid); return; }
   const el = e.target.closest('.lv');
   if (!el || !navigator.clipboard) return;
   const txt = el.textContent || '';
@@ -2024,7 +2074,8 @@ function renderLeads() {
   sub.textContent = '共 ' + L.total + ' 条 · ' + sc.from + ' ~ ' + sc.to
     + (L.agent ? ' · ' + L.agent : '') + (L.type ? ' · ' + leadTypeText(L.type) : '');
   box.innerHTML = '<table><thead><tr><th>日期</th><th>客服</th><th>粉丝</th><th>类型</th>'
-    + '<th>联系方式</th><th style="text-align:right">登记时间</th></tr></thead><tbody>'
+    + '<th>联系方式</th><th style="text-align:right">登记时间</th>'
+    + (Auth.isAdmin ? '<th style="text-align:right">操作</th>' : '') + '</tr></thead><tbody>'
     + L.rows.map((r) => {
       const a = r.agent_id || '(未命名)';
       const nm = r.peer_name
@@ -2037,6 +2088,10 @@ function renderLeads() {
         + '<td><span class="tag lead">' + esc(leadTypeText(r.lead_type)) + '</span></td>'
         + '<td><span class="lv" title="点击复制">' + esc(r.lead_value || '') + '</span></td>'
         + '<td style="text-align:right" class="muted">' + esc(fmtDateTime(r.captured_at)) + '</td>'
+        + (Auth.isAdmin
+          ? '<td style="text-align:right">'
+            + (r.id ? '<button class="btn sm danger" data-lid="' + esc(r.id) + '">删除</button>' : '')
+            + '</td>' : '')
         + '</tr>';
     }).join('') + '</tbody></table>';
   $('#leadMore').style.display = L.rows.length < L.total ? '' : 'none';
@@ -2102,6 +2157,253 @@ async function exportLeadsCsv() {
     btn.textContent = old;
   }
 }
+
+/* =====================================================================
+ * 记录管理（v1.8）—— 窗口记录 / 接入记录 / 留资记录 增删改
+ * ---------------------------------------------------------------------
+ * 数据通道：v2.26.0 迁移新增的 board_record_* RPC（均 admin 专用 +
+ * 服务端审计）。云端迁移未执行时，调用会报「数据库函数不存在」。
+ * 前置：board_claims / board_leads 需返回行 id（迁移 SEG 4 补上），
+ *       没有id 的行不显示行级操作按钮（防御旧数据/未迁移）。
+ * 删除：一律两步确认（先看明细，再最终确认），不可撤销操作不静默。
+ * ===================================================================== */
+
+Object.assign(ERR_TEXT, {
+  bad_browser: '窗口 ID 必填（1~64 位字符）',
+  bad_peer: '粉丝 @ID 必填（去掉 @ 后 1~64 位）',
+  bad_platform: '平台不能为空',
+  no_staff: '员工不存在：请先在「账号管理 → 员工名单」里添加',
+  no_row: '记录不存在或已被他人删除',
+  not_bound: '该窗口当前没有生效的绑定'
+});
+/* ACT_TEXT 的新增条目直接写在下方 ACT_TEXT 字面量里（const 声明在本块之后，此处不可引用） */
+
+/* ==RECVAL-BEGIN==（行为测试锚点：纯校验函数，勿插入依赖 DOM 的代码） */
+function recValidate(type, v) {
+  const bad = (error) => ({ ok: false, error });
+  const trim = (x) => String(x == null ? '' : x).trim();
+  if (type === 'binding') {
+    const bid = trim(v.browser_id);
+    if (!bid || bid.length > 64) return bad('窗口 ID 必填（1~64 位字符）');
+    const a = trim(v.agent_id);
+    if (!a) return bad('请选择员工');
+    return { ok: true, vals: {
+      browser_id: bid, agent_id: a,
+      label: trim(v.label).slice(0, 20)
+    } };
+  }
+  const pk = trim(v.peer_key).replace(/^@+/, '');
+  if (!pk || pk.length > 64) return bad('粉丝 @ID 必填（去掉 @ 后 1~64 位）');
+  const a = trim(v.agent_id);
+  if (!a) return bad('请选择员工');
+  return { ok: true, vals: {
+    platform: trim(v.platform) || 'tiktok',
+    peer_key: pk,
+    peer_name: trim(v.peer_name).slice(0, 60),
+    agent_id: a,
+    browser_id: trim(v.browser_id).slice(0, 64)
+  } };
+}
+/* ==RECVAL-END== */
+
+/* 删除一律两步确认：第一步给明细，第二步最终确认 */
+function confirmDelete(what, detail) {
+  if (!confirm('删除' + what + '？\n\n' + detail + '\n\n该操作不可撤销。')) return false;
+  if (!confirm('再次确认：确定要删除这条' + what + '吗？此操作无法恢复。')) return false;
+  return true;
+}
+
+const REC = { type: '', row: null, staff: null, busy: false };
+
+async function recStaffOptions() {
+  if (REC.staff) return REC.staff;
+  try {
+    const d = await rpc('board_staff_list', { p_token: Auth.token });
+    REC.staff = (d.ok && Array.isArray(d.rows))
+      ? d.rows.filter((s) => s.status === 'active')
+      : [];
+  } catch (e) { REC.staff = []; }
+  return REC.staff;
+}
+
+function recMsg(m, isBad) {
+  const el = $('#recMsg');
+  if (!m) { el.className = 'msg'; el.textContent = ''; return; }
+  el.className = 'msg on' + (isBad ? ' bad' : ' ok');
+  el.textContent = m;
+}
+
+function recField(label, inputHtml) {
+  return '<div class="field"><label>' + label + '</label>' + inputHtml + '</div>';
+}
+
+async function openRecModal(type, row) {
+  if (!Auth.isAdmin) { alert(errText('admin_only')); return; }
+  REC.type = type;
+  REC.row = row || null;
+  const edit = !!row;
+  const staff = await recStaffOptions();
+  const stOpts = (sel) => ['<option value="">— 选择员工 —</option>'].concat(staff.map((s) =>
+    '<option value="' + esc(s.id) + '"' + (sel === s.id ? ' selected' : '') + '>'
+    + esc((s.name || s.id) + '（' + s.id + '）') + '</option>')).join('');
+  let fields;
+  if (type === 'binding') {
+    $('#recTitle').textContent = edit ? '编辑窗口记录' : '新增窗口记录';
+    $('#recDesc').textContent = edit
+      ? '改绑员工或改窗口名。保留原租约：该窗口运行中的扩展下一次心跳会自动跟随，不会被打断。'
+      : '手动登记「员工 ↔ 浏览器窗口」绑定。窗口 ID 可在扩展设置页查看（约 8 位字符）。'
+        + (staff.length ? '' : '（员工名单为空或读取失败，请先补员工）');
+    fields = recField('窗口 ID' + (edit ? '（不可修改）' : '（必填）'),
+        '<input class="input" id="rfBrowser" maxlength="64" spellcheck="false" '
+        + (edit ? 'disabled value="' + esc(row.browser_id || '') + '"' : 'placeholder="例如 1bf49dae"') + ' />')
+      + recField('员工', '<select class="input" id="rfAgent">' + stOpts(edit ? row.agent_id : '') + '</select>')
+      + recField('窗口名称（可空，≤20 字）',
+        '<input class="input" id="rfLabel" maxlength="20" value="' + esc(row && row.browser_label || '') + '" placeholder="例如 1号机" />');
+  } else {
+    $('#recTitle').textContent = edit ? '编辑接入记录' : '新增接入记录';
+    $('#recDesc').textContent = edit
+      ? '平台和粉丝 @ID 是查重身份，不可修改；可改 昵称 / 员工 / 窗口。'
+      : '手动登记一条接入记录。同一粉丝同一员工同一窗口的重复记录会被拒绝。'
+        + (staff.length ? '' : '（员工名单为空或读取失败，请先补员工）');
+    fields = (edit
+        ? recField('粉丝 @ID（不可修改）', '<input class="input" disabled value="@' + esc(row.peer_key || '') + '" />')
+        : recField('粉丝 @ID（必填，不带 @）', '<input class="input" id="rfPeer" maxlength="64" spellcheck="false" placeholder="例如 wwpxzhl" />'))
+      + recField('昵称（可空）', '<input class="input" id="rfName" maxlength="60" value="' + esc(row && row.peer_name || '') + '" />')
+      + recField('员工', '<select class="input" id="rfAgent">' + stOpts(edit ? row.agent_id : '') + '</select>')
+      + recField('窗口 ID（可空）', '<input class="input" id="rfBrowser2" maxlength="64" spellcheck="false" value="' + esc(row && row.browser_id || '') + '" />');
+  }
+  $('#recFields').innerHTML = fields;
+  recMsg('');
+  $('#recOk').disabled = false;
+  $('#recModal').classList.add('on');
+  const first = $('#recFields').querySelector('input:not([disabled]), select');
+  if (first) { try { first.focus(); } catch (e2) {} }
+}
+
+function closeRecModal() {
+  $('#recModal').classList.remove('on');
+  REC.type = ''; REC.row = null;
+}
+
+async function recSave() {
+  if (REC.busy || !REC.type) return;
+  const g = (id) => { const el = $(id); return el && !el.disabled ? el.value : (el ? el.value : ''); };
+  const v = {
+    browser_id: REC.type === 'binding' ? g('#rfBrowser') : g('#rfBrowser2'),
+    agent_id: g('#rfAgent'),
+    label: g('#rfLabel'),
+    peer_key: REC.type === 'claim' && REC.row ? (REC.row.peer_key || '') : g('#rfPeer'),
+    peer_name: g('#rfName')
+  };
+  const chk = recValidate(REC.type, v);
+  if (!chk.ok) { recMsg(chk.error, true); return; }
+  const btn = $('#recOk');
+  btn.disabled = true;
+  REC.busy = true;
+  try {
+    let d;
+    if (REC.type === 'binding') {
+      d = await rpc('board_record_binding_upsert', {
+        p_token: Auth.token,
+        p_browser_id: chk.vals.browser_id,
+        p_agent_id: chk.vals.agent_id,
+        p_browser_label: chk.vals.label
+      });
+    } else if (REC.row) {
+      d = await rpc('board_record_claim_upsert', {
+        p_token: Auth.token, p_id: REC.row.id,
+        p_peer_name: chk.vals.peer_name, p_agent_id: chk.vals.agent_id,
+        p_browser_id: chk.vals.browser_id
+      });
+    } else {
+      d = await rpc('board_record_claim_upsert', {
+        p_token: Auth.token,
+        p_platform: chk.vals.platform, p_peer_key: chk.vals.peer_key,
+        p_peer_name: chk.vals.peer_name, p_agent_id: chk.vals.agent_id,
+        p_browser_id: chk.vals.browser_id
+      });
+    }
+    if (!d.ok) { recMsg(errText(d.error), true); btn.disabled = false; REC.busy = false; return; }
+    const kind = REC.type;
+    closeRecModal();
+    await recRefresh(kind);
+  } catch (e) {
+    recMsg('保存失败：' + String(e.message || e), true);
+    btn.disabled = false;
+  } finally {
+    REC.busy = false;
+  }
+}
+
+/* 操作成功后的联动刷新：窗口记录 → 在线窗口 + 待归属；
+ * 接入记录 → 接入记录 + 待归属 + 统计；留资 → 留资 + 统计。 */
+async function recRefresh(kind) {
+  try {
+    if (kind === 'binding') {
+      await loadBindings();
+      loadUnassigned();
+    } else if (kind === 'claim') {
+      await load();
+      loadUnassigned();
+      loadStats();
+    } else if (kind === 'lead') {
+      await loadLeads(false);
+      loadStats();
+    }
+  } catch (e) { /* 刷新失败不打断（轮询会补上） */ }
+}
+
+async function bindingOp(op, bid) {
+  const b = (state.bindings || []).find((x) => String(x.browser_id) === String(bid));
+  if (!b) { alert('窗口记录已变化，请刷新后重试'); return; }
+  if (op === 'edit') { openRecModal('binding', b); return; }
+  if (op === 'del') {
+    if (!confirmDelete('窗口记录',
+      '员工「' + staffName(b) + '」· 窗口「' + (b.browser_label || '未命名窗口') + '」（ID: ' + b.browser_id + '）。'
+      + '删除后该窗口立即失去员工身份，扩展侧会提示未绑定；绑定历史保留在审计里。')) return;
+    try {
+      const d = await rpc('board_record_binding_delete', { p_token: Auth.token, p_browser_id: b.browser_id });
+      if (!d.ok) { alert(errText(d.error)); return; }
+      await recRefresh('binding');
+    } catch (e) { alert('删除失败：' + String(e.message || e)); }
+  }
+}
+
+async function claimOp(op, cid) {
+  const r = (state.rows || []).find((x) => String(x.id) === String(cid));
+  if (!r) { alert('记录已变化，请刷新后重试'); return; }
+  if (op === 'edit') { openRecModal('claim', r); return; }
+  if (op === 'del') {
+    if (!confirmDelete('接入记录',
+      '粉丝 @' + (r.peer_key || '') + (r.peer_name ? '（' + r.peer_name + '）' : '')
+      + ' · 员工 ' + (r.agent_id || '') + '。删除后该粉丝的接待记录从此处消失，'
+      + '扩展侧如仍在同一会话操作可能重新登记。')) return;
+    try {
+      const d = await rpc('board_record_claim_delete', { p_token: Auth.token, p_id: r.id });
+      if (!d.ok) { alert(errText(d.error)); return; }
+      await recRefresh('claim');
+    } catch (e) { alert('删除失败：' + String(e.message || e)); }
+  }
+}
+
+async function leadOp(lid) {
+  const r = (state.leads.rows || []).find((x) => String(x.id) === String(lid));
+  if (!r) { alert('记录已变化，请刷新后重试'); return; }
+  if (!confirmDelete('留资记录',
+    '粉丝 @' + (r.peer_key || '') + ' · ' + (r.lead_type || '') + ' · ' + (r.lead_value || '')
+    + '（' + (r.agent_id || '') + '，' + (r.stat_date || '') + '）。删除后统计数量同步减少。')) return;
+  try {
+    const d = await rpc('board_record_lead_delete', { p_token: Auth.token, p_id: r.id });
+    if (!d.ok) { alert(errText(d.error)); return; }
+    await recRefresh('lead');
+  } catch (e) { alert('删除失败：' + String(e.message || e)); }
+}
+
+$('#btnBindingAdd').addEventListener('click', () => openRecModal('binding', null));
+$('#btnClaimAdd').addEventListener('click', () => openRecModal('claim', null));
+$('#recCancel').addEventListener('click', closeRecModal);
+$('#recOk').addEventListener('click', recSave);
+$('#recModal').addEventListener('click', (e) => { if (e.target === $('#recModal')) closeRecModal(); });
 
 /* =====================================================================
  * 账号管理抽屉
@@ -2530,7 +2832,10 @@ const ACT_TEXT = {
   login: '登录', logout: '退出', login_fail: '登录失败',
   user_create: '新建账号', user_setpwd: '重置密码', user_setrole: '修改角色',
   user_enable: '启用账号', user_disable: '停用账号', user_delete: '删除账号',
-  export: '导出数据', change_pwd: '修改密码'
+  export: '导出数据', change_pwd: '修改密码',
+  binding_create: '新增窗口记录', binding_edit: '编辑窗口记录', binding_delete: '删除窗口记录',
+  claim_create: '新增接入记录', claim_edit: '编辑接入记录', claim_delete: '删除接入记录',
+  lead_delete: '删除留资记录'
 };
 
 function renderLogs() {
