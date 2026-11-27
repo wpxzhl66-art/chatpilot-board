@@ -1,10 +1,10 @@
 {
   "name": "ChatPilot 私信助手",
-  "version": "3.0.6",
-  "url": "download/ChatPilotSetup-3.0.6.exe",
-  "md5": "a1481027eccf1371f8b4b93c3cce0b3e",
-  "size": 2861336,
+  "version": "3.0.7",
+  "url": "download/ChatPilotSetup-3.0.7.exe",
+  "md5": "dcc8a852320f3bf9be70529b2a2c85a8",
+  "size": 2861735,
   "publishedAt": "2026-11-27",
-  "notes": "同步链路修复：恢复6小时低频拉取、登出清同步进度、注册即首传；SW顶层不再发心跳；一键更新器重写",
+  "notes": "弹窗入口调整：「拆成独立小窗」改为「数据看板」（新标签页打开在线看板）；侧边栏头部分离按钮保留",
   "page": "index.html"
 }
