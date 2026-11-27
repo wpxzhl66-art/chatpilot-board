@@ -13,6 +13,7 @@
     --amber:#b45309; --amber-soft:#fffbeb;
     --green:#047857; --green-soft:#ecfdf5;
     --r:14px;
+    --nav-w:236px;               /* v1.9：左侧导航宽度（借鉴「何为交易」三栏外壳） */
     --shadow:0 1px 2px rgba(16,24,40,.05), 0 8px 24px rgba(16,24,40,.06);
   }
   *{box-sizing:border-box}
@@ -23,7 +24,7 @@
     -webkit-font-smoothing:antialiased; text-rendering:optimizeLegibility;
   }
   [hidden]{display:none !important}
-  .wrap{max-width:1320px;margin:0 auto;padding:0 20px 56px}
+  .wrap{max-width:1320px;margin:0 auto;padding:24px 24px 56px}
 
   /* ================= 登录 ================= */
   .login-view{
@@ -111,12 +112,44 @@
   .spin.dark{border-color:#c7d7ff;border-top-color:#2563eb}
   @keyframes sp{to{transform:rotate(360deg)}}
 
-  /* ================= 顶栏 ================= */
-  .top{
-    position:sticky; top:0; z-index:30; background:rgba(244,245,247,.9);
-    backdrop-filter:saturate(180%) blur(10px); border-bottom:1px solid var(--line); margin-bottom:18px;
+  /* ================= 左侧导航（v1.9：顶栏迁入左侧固定侧栏） =================
+   * 借鉴「何为交易」的导航层级：logo 区 → 分组小标签 → 导航项（带激活指示条）
+   * → 底部用户区；主区右移留白，窄屏（≤960px）回退为吸顶横条。 */
+  #appView{padding-left:var(--nav-w)}
+  .side{
+    position:fixed; left:0; top:0; bottom:0; width:var(--nav-w); z-index:40;
+    display:flex; flex-direction:column; padding:20px 14px 16px;
+    background:rgba(255,255,255,.9); border-right:1px solid var(--line);
+    backdrop-filter:saturate(160%) blur(12px);
   }
-  .top-in{max-width:1320px;margin:0 auto;padding:11px 20px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;position:relative}
+  .side-logo{display:flex;align-items:center;gap:10px;padding:0 6px 18px}
+  .side-logo .logo{
+    width:30px;height:30px;flex:none;border-radius:9px;background:linear-gradient(135deg,#2563eb,#7c3aed);
+    display:grid;place-items:center;color:#fff;font-size:13px;font-weight:700;line-height:1
+  }
+  .side-logo .nm{font-size:14.5px;font-weight:650;letter-spacing:.2px;line-height:1.25}
+  .side-logo .nm small{
+    display:block;font-size:9.5px;color:var(--tx3);font-weight:400;letter-spacing:1.6px;margin-top:2px
+  }
+  .side-sec{font-size:10px;color:var(--tx3);letter-spacing:1.6px;padding:12px 8px 7px;user-select:none}
+  .side-block{position:relative;display:flex;flex-direction:column;gap:6px}
+  .seg.vert{display:flex;flex-direction:column;background:none;padding:0;gap:2px}
+  .seg.vert button{
+    position:relative;display:flex;align-items:center;width:100%;text-align:left;
+    border:0;background:transparent;color:var(--tx2);font:inherit;font-size:13.5px;
+    padding:8px 12px;border-radius:9px;cursor:pointer;transition:.15s;white-space:nowrap
+  }
+  .seg.vert button:hover{color:var(--tx);background:#f3f4f6;transform:translateX(2px)}
+  .seg.vert button.on{background:var(--blue-soft);color:var(--blue);font-weight:600;box-shadow:none}
+  .seg.vert button.on::before{
+    content:'';position:absolute;left:0;top:50%;transform:translateY(-50%);
+    width:3px;height:16px;border-radius:0 3px 3px 0;background:linear-gradient(180deg,#2563eb,#7c3aed)
+  }
+  .side-block .chip{align-self:flex-start;margin-top:2px}
+  .side-block .btn{width:100%;justify-content:flex-start}
+  .side-block .btn.primary{justify-content:center}
+  .side-foot{margin-top:auto;padding-top:14px;border-top:1px solid var(--line2)}
+  .side-foot .me{width:100%;flex-wrap:wrap;border-radius:14px;padding:8px 8px 8px 10px}
   .brand{display:flex;align-items:center;gap:9px;font-weight:650;font-size:15px;letter-spacing:.2px}
   .brand .logo{
     width:26px;height:26px;flex:none;border-radius:8px;background:linear-gradient(135deg,#2563eb,#7c3aed);
@@ -141,7 +174,7 @@
   /* ---------- 自选日期板块 ---------- */
   .btn.on{border-color:var(--blue);color:var(--blue);background:var(--blue-soft);font-weight:600}
   .datepop{
-    position:absolute; z-index:60; top:calc(100% + 6px); right:150px; width:300px;
+    position:absolute; z-index:60; top:-2px; left:calc(100% + 10px); width:300px;
     background:#fff; border:1px solid var(--line); border-radius:14px;
     box-shadow:0 12px 32px rgba(16,24,40,.14); padding:14px; text-align:left;
   }
@@ -408,7 +441,30 @@
   .modal-card p{margin:0 0 16px;font-size:12.8px;color:var(--tx3);line-height:1.6}
   .modal-card .field{margin-bottom:12px}
   .modal-ops{display:flex;gap:8px;justify-content:flex-end;margin-top:18px}
-  @media print{ .top,.seg,.btn,.me{display:none} body{background:#fff} }
+  /* ---------- 窄屏（≤960px）：侧栏回退为吸顶横条，保持可用 ---------- */
+  @media (max-width:960px){
+    #appView{padding-left:0}
+    .wrap{padding-top:0}
+    .side{
+      position:sticky; top:0; width:auto; margin-bottom:14px;
+      flex-direction:row; flex-wrap:wrap; align-items:center; gap:10px;
+      padding:10px 14px; border-right:0; border-bottom:1px solid var(--line);
+      background:rgba(244,245,247,.92); backdrop-filter:saturate(180%) blur(10px);
+    }
+    .side-logo{padding:0}
+    .side-logo .nm small{display:none}
+    .side-sec{display:none}
+    .side-block{flex-direction:row; flex-wrap:wrap; align-items:center; gap:8px}
+    .seg.vert{flex-direction:row;background:#e9ebef;border-radius:9px;padding:2px;gap:2px}
+    .seg.vert button{width:auto;padding:5px 11px;border-radius:7px;font-size:13px;transform:none}
+    .seg.vert button.on{background:#fff;color:var(--tx);box-shadow:0 1px 2px rgba(16,24,40,.1)}
+    .seg.vert button.on::before{display:none}
+    .side-block .btn{width:auto}
+    .side-foot{margin:0;padding:0;border:0}
+    .side-foot .me{width:auto;border-radius:999px;padding:4px 4px 4px 10px}
+    .datepop{left:auto; right:20px; top:calc(100% + 8px); width:300px}
+  }
+  @media print{ .side,.seg,.btn,.me{display:none} body{background:#fff} #appView{padding-left:0} }
 </style>
 </head>
 <body class="gate-locked">
@@ -485,11 +541,15 @@
 
 <!-- ===================== 主视图 ===================== -->
 <div id="appView" hidden>
-  <div class="top">
-    <div class="top-in">
-      <div class="brand"><span class="logo">CP</span>客服接待看板<small>ChatPilot</small></div>
-      <div class="grow"></div>
-      <div class="seg" id="rangeSeg">
+  <!-- v1.9：左侧导航（借鉴「何为交易」侧栏结构；原顶栏全部控件原样迁入，id/交互不变） -->
+  <nav class="side" id="sideBar" aria-label="看板导航">
+    <div class="side-logo">
+      <span class="logo">CP</span>
+      <span class="nm">客服接待看板<small>ChatPilot</small></span>
+    </div>
+    <div class="side-sec">统计范围</div>
+    <div class="side-block" id="rangeBlock">
+      <div class="seg vert" id="rangeSeg">
         <button data-r="today">今日</button>
         <button data-r="7d">近 7 天</button>
         <button data-r="30d" class="on">近 30 天</button>
@@ -497,47 +557,55 @@
       </div>
       <span class="chip" id="dayChip" style="display:none"></span>
       <button class="btn" id="btnDate" title="自选单个日期或日期区间">📅 自选日期</button>
-      <div class="seg" id="metricSeg">
+      <!-- 自选日期下拉面板：桌面端从侧栏右侧弹出，窄屏落在按钮下方 -->
+      <div class="datepop" id="datePop" hidden>
+        <div class="seg dp-tabs" id="dpTabs">
+          <button data-t="single" class="on">单日</button>
+          <button data-t="range">日期区间</button>
+        </div>
+        <div id="dpSingle">
+          <label>选择日期</label>
+          <input type="date" id="dateSingle">
+          <div class="dp-actions">
+            <button class="btn primary" id="dpApplySingle">应用</button>
+            <span class="dp-clear" data-act="dpClear">清除筛选</span>
+          </div>
+        </div>
+        <div id="dpRange" hidden>
+          <label>起止日期</label>
+          <div class="dp-row">
+            <input type="date" id="dateStart"><span class="dp-sep">→</span><input type="date" id="dateEnd">
+          </div>
+          <div class="dp-quick">
+            <button class="btn sm" data-q="7">近 7 天</button>
+            <button class="btn sm" data-q="30">近 30 天</button>
+            <button class="btn sm" data-q="90">近 90 天</button>
+          </div>
+          <div class="dp-actions">
+            <button class="btn primary" id="dpApplyRange">应用</button>
+            <span class="dp-clear" data-act="dpClear">清除筛选</span>
+          </div>
+        </div>
+        <div class="dp-hint" id="dpHint">最多一次可看 180 天；筛选作用于下方所有板块。</div>
+      </div>
+    </div>
+    <div class="side-sec">统计口径</div>
+    <div class="side-block">
+      <div class="seg vert" id="metricSeg">
         <button data-m="first" class="on">按首次接待</button>
         <button data-m="active">按最近活跃</button>
       </div>
       <button class="btn" id="btnProv" title="把「接待中但未达登记阈值」的临时占位也算进来">含接待中</button>
+    </div>
+    <div class="side-sec">操作</div>
+    <div class="side-block">
       <button class="btn" id="btnCsv">导出 CSV</button>
       <button class="btn primary" id="btnReload">刷新</button>
+    </div>
+    <div class="side-foot">
       <div class="me" id="meBox"></div>
     </div>
-    <!-- 自选日期下拉面板 -->
-    <div class="datepop" id="datePop" hidden>
-      <div class="seg dp-tabs" id="dpTabs">
-        <button data-t="single" class="on">单日</button>
-        <button data-t="range">日期区间</button>
-      </div>
-      <div id="dpSingle">
-        <label>选择日期</label>
-        <input type="date" id="dateSingle">
-        <div class="dp-actions">
-          <button class="btn primary" id="dpApplySingle">应用</button>
-          <span class="dp-clear" data-act="dpClear">清除筛选</span>
-        </div>
-      </div>
-      <div id="dpRange" hidden>
-        <label>起止日期</label>
-        <div class="dp-row">
-          <input type="date" id="dateStart"><span class="dp-sep">→</span><input type="date" id="dateEnd">
-        </div>
-        <div class="dp-quick">
-          <button class="btn sm" data-q="7">近 7 天</button>
-          <button class="btn sm" data-q="30">近 30 天</button>
-          <button class="btn sm" data-q="90">近 90 天</button>
-        </div>
-        <div class="dp-actions">
-          <button class="btn primary" id="dpApplyRange">应用</button>
-          <span class="dp-clear" data-act="dpClear">清除筛选</span>
-        </div>
-      </div>
-      <div class="dp-hint" id="dpHint">最多一次可看 180 天；筛选作用于下方所有板块。</div>
-    </div>
-  </div>
+  </nav>
 
   <div class="wrap">
     <div id="bannerBox"></div>
@@ -687,7 +755,7 @@
     </details>
 
     <div class="foot">
-      记录管理（v1.8）：管理员可在「在线窗口 / 接入记录 / 留资明细」直接 新增 / 编辑 / 删除，操作全部写入服务端审计<br>
+      v1.9 侧边导航布局 · 记录管理（v1.8）：管理员可在「在线窗口 / 接入记录 / 留资明细」直接 新增 / 编辑 / 删除，操作全部写入服务端审计<br>
       数据经服务端校验后返回 · 每行代表「某客服在某台浏览器上接待过某位粉丝」 ·
       同一粉丝被 2 个及以上客服编号接待过，会在「重复承接提醒」中标红列出
     </div>
@@ -2947,11 +3015,7 @@ function dpOpen() {
   dpSetTab(state.range === 'custom' ? 'range' : 'single');
   datePop.hidden = !datePop.hidden;
   if (!datePop.hidden) {
-    /* 面板右缘对齐「自选日期」按钮右缘，并钳制在容器内不越界 */
-    const top = document.querySelector('.top-in');
-    const br = $('#btnDate').getBoundingClientRect(), tr = top.getBoundingClientRect();
-    const r = Math.round(tr.right - br.right);
-    datePop.style.right = Math.min(Math.max(8, r), Math.max(8, Math.round(tr.width - 308))) + 'px';
+    /* v1.9：弹出位置由 CSS 控制（桌面端=侧栏右侧飞出，窄屏=按钮下方），JS 不再算偏移 */
     const first = state.range === 'custom' ? $('#dateStart') : $('#dateSingle');
     setTimeout(() => first.focus(), 30);
   }
