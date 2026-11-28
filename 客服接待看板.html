@@ -827,6 +827,7 @@
     <div class="foot">
       v1.12 盯盘效率：常驻 KPI 摘要条（今日接待/留资/有效咨询/新会话/待归属/撞单，点击跳转） · 全局搜索（侧栏搜粉丝/窗口/联系方式，直达并高亮） ·
       待处理/撞单增加时板块闪烁 + 浏览器标签页角标 (n) · 新会话队列（近 30 分钟有动静的未转正会话，纯现有数据推算）<br>
+      搜索结果精确定位（v1.12.1）：留资行带唯一行 id 锚点，同一粉丝留了多条也能跳到对的那一行（搜索范围为已加载页，条数在结果底部明示） ·
       静默自动刷新（v1.11）：手动刷新按钮已移除，侧栏可选每 15 秒 / 30 秒 / 1 分钟 / 5 分钟自动刷新（失败保留上次数据，不打断操作） ·
       优先级重排（v1.10）：在线窗口置顶（唯一默认展开），其余板块默认收起、点标题展开（展开状态本机记忆）<br>
       记录管理（v1.8）：管理员可在「在线窗口 / 接入记录 / 留资明细」直接 新增 / 编辑 / 删除，操作全部写入服务端审计 ·
@@ -1663,13 +1664,18 @@ function searchAll(qRaw) {
     }
     if (cap()) return res;
   }
-  /* 4) 留资明细（仅已加载页） */
+  /* 4) 留资明细（仅已加载页）
+   * v1.12.1：去重与跳转锚点都优先用行 id——同一粉丝同类型可能留了多条联系方式，
+   * 用 peer_key 去重会吞掉合法记录，用 data-peer 跳转会永远落在第一行。 */
   for (const r of state.leads.rows || []) {
     const k = String(r.peer_key || '');
-    const uk = 'l|' + k + '|' + String(r.lead_value || '');
+    const lid = String(r.id || '');
+    const uk = 'l|' + (lid || (k + '|' + String(r.lead_value || '')));
     if (!seen.has(uk) && hit(k, r.peer_name, r.lead_value, r.agent_id, leadTypeText(r.lead_type))) {
       seen.add(uk);
-      res.push({ sec: '留资明细', fold: 'lead', anchor: '#leadWrap tr[data-peer="' + k + '"]', key: k,
+      res.push({ sec: '留资明细', fold: 'lead',
+        anchor: lid ? '#leadWrap tr[data-lid="' + lid + '"]' : '#leadWrap tr[data-peer="' + k + '"]',
+        key: k,
         name: r.peer_name || '', who: leadTypeText(r.lead_type) + '：' + (r.lead_value || ''), t: r.captured_at });
     }
     if (cap()) return res;
@@ -2614,7 +2620,10 @@ function renderLeads() {
       const a = r.agent_id || '(未命名)';
       const nm = r.peer_name
         ? ' <span class="nm2" title="' + esc(r.peer_name) + '">' + esc(r.peer_name) + '</span>' : '';
-      return '<tr data-peer="' + esc(r.peer_key || '') + '">'
+      /* v1.12.1：行级唯一锚点 data-lid（同一粉丝可能留多条：WhatsApp + TG 等，
+       * 只靠 data-peer 会让搜索跳转永远命中第一行，跳错行） */
+      return '<tr data-peer="' + esc(r.peer_key || '') + '"'
+        + (r.id ? ' data-lid="' + esc(r.id) + '"' : '') + '>'
         + '<td class="muted">' + esc(r.stat_date || '') + '</td>'
         + '<td><span class="tag"><span class="sw" style="background:' + agentColor(a) + '"></span>'
         + esc(a) + '</span></td>'
