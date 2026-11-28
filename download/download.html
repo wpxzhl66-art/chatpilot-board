@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ChatPilot 私信助手 · TikTok / 抖音私信 AI 候选回复插件</title>
+<meta name="description" content="ChatPilot 私信助手：装在自己电脑上的浏览器插件，读取 TikTok / 抖音私信会话，按人设生成 5 条中文候选回复，发送前自动翻译成对方语言。免费、本地运行、不替你按发送键。">
+<style>
+:root{
+  --bg:#F2F2F7; --card:#FFFFFF; --line:#E5E5EA; --line2:#D6D6DB;
+  --text:#1C1C1E; --text2:#6E6E73; --muted:#AEAEB2;
+  --blue:#007AFF; --blue-d:#0063CC; --green:#34C759; --orange:#FF9500;
+  --blue-t:#EAF2FF; --grey-t:#F7F7FA; --orange-t:#FFF4E5; --green-t:#EAF9EE;
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%;scroll-behavior:smooth}
+body{
+  margin:0;background:var(--bg);color:var(--text);
+  font:15px/1.8 -apple-system,BlinkMacSystemFont,"SF Pro Text","PingFang SC","Microsoft YaHei",system-ui,sans-serif;
+  -webkit-font-smoothing:antialiased;
+}
+.wrap{max-width:940px;margin:0 auto;padding:0 24px}
+
+/* 顶栏 */
+.nav{position:sticky;top:0;z-index:20;background:rgba(242,242,247,.86);backdrop-filter:saturate(180%) blur(14px);
+  border-bottom:1px solid var(--line)}
+.nav .inner{max-width:940px;margin:0 auto;padding:12px 24px;display:flex;align-items:center;gap:12px}
+.brand{display:flex;align-items:center;gap:10px;font-weight:700;font-size:16px}
+.brand .mark{width:30px;height:30px;border-radius:9px;background:linear-gradient(160deg,#3D9BFF,#007AFF 60%,#0062D6);
+  display:grid;place-items:center;box-shadow:0 4px 10px rgba(0,122,255,.3)}
+.nav .sp{flex:1}
+
+/* 按钮 */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;border-radius:12px;padding:11px 20px;
+  font-size:14.5px;font-weight:650;text-decoration:none;border:1px solid transparent;cursor:pointer;font-family:inherit;
+  transition:transform .12s ease,box-shadow .12s ease,background .12s}
+.btn:active{transform:translateY(1px)}
+.btn.primary{background:var(--blue);color:#fff;box-shadow:0 8px 22px rgba(0,122,255,.34)}
+.btn.primary:hover{background:var(--blue-d)}
+.btn.ghost{background:#fff;color:var(--text);border-color:var(--line2)}
+.btn.ghost:hover{border-color:var(--blue);color:var(--blue)}
+.btn.sm{padding:8px 14px;font-size:13px;border-radius:10px}
+
+/* 首屏 */
+.hero{background:var(--card);border:1px solid var(--line);border-radius:26px;padding:52px 40px 44px;text-align:center;
+  margin-top:28px;box-shadow:0 14px 46px rgba(0,0,0,.055)}
+.hero .mark{width:82px;height:82px;margin:0 auto 20px;border-radius:22px;
+  background:linear-gradient(160deg,#3D9BFF,#007AFF 60%,#0062D6);display:grid;place-items:center;
+  box-shadow:0 12px 28px rgba(0,122,255,.34)}
+.hero h1{font-size:38px;line-height:1.25;margin:0 0 12px;letter-spacing:-.8px}
+.hero .sub{margin:0 auto 26px;max-width:600px;color:var(--text2);font-size:16px;line-height:1.75}
+.hero .cta{display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin-bottom:22px}
+.badges{display:flex;justify-content:center;gap:8px;flex-wrap:wrap}
+.pill{font-size:12px;padding:5px 13px;border-radius:999px;background:var(--blue-t);color:var(--blue-d);
+  font-weight:600;border:1px solid #D6E7FF}
+.pill.grey{background:var(--grey-t);color:var(--text2);border-color:var(--line)}
+.pill.green{background:var(--green-t);color:#1E6B37;border-color:#CDEFD8}
+
+/* 通用区块 */
+section{margin-top:52px}
+h2{font-size:24px;margin:0 0 6px;letter-spacing:-.3px}
+h2 + .lead{color:var(--text2);font-size:14.5px;margin:0 0 20px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:22px 24px}
+.grid{display:grid;gap:14px}
+.g3{grid-template-columns:repeat(3,1fr)}
+.g2{grid-template-columns:repeat(2,1fr)}
+.feat{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:18px 18px 16px}
+.feat .ic{width:36px;height:36px;border-radius:11px;background:var(--blue-t);display:grid;place-items:center;margin-bottom:11px}
+.feat b{display:block;font-size:14.5px;margin-bottom:4px}
+.feat span{font-size:13px;color:var(--text2);line-height:1.7}
+
+/* 步骤 */
+.steps{counter-reset:s;list-style:none;padding:0;margin:14px 0 0}
+.steps li{counter-increment:s;position:relative;padding:0 0 2px 42px;margin:0 0 16px}
+.steps li::before{content:counter(s);position:absolute;left:0;top:1px;width:28px;height:28px;border-radius:50%;
+  background:var(--blue-t);color:var(--blue-d);font-size:13.5px;font-weight:700;display:grid;place-items:center;border:1px solid #D6E7FF}
+.steps li b{display:block;font-size:14.5px}
+.steps li span{font-size:13.5px;color:var(--text2);line-height:1.75}
+code{background:var(--grey-t);border:1px solid var(--line);border-radius:6px;padding:1px 6px;font-size:12.5px;
+  font-family:ui-monospace,SFMono-Regular,Consolas,"Courier New",monospace}
+kbd{background:#fff;border:1px solid var(--line2);border-bottom-width:2px;border-radius:6px;padding:1px 6px;font-size:12px;font-weight:600}
+
+/* 下载卡 */
+.dl{display:flex;align-items:center;gap:16px;background:var(--card);border:1px solid var(--line);border-radius:16px;
+  padding:18px 20px;text-decoration:none;color:inherit;transition:border-color .15s,box-shadow .15s}
+.dl:hover{border-color:var(--blue);box-shadow:0 8px 22px rgba(0,122,255,.13)}
+.dl .ic{flex:none;width:44px;height:44px;border-radius:13px;background:var(--blue-t);display:grid;place-items:center;font-size:19px}
+.dl .tx{flex:1;min-width:0}
+.dl .tx b{display:block;font-size:14.5px}
+.dl .tx span{font-size:12.5px;color:var(--text2)}
+.dl .go{flex:none;font-size:13px;font-weight:650;color:var(--blue)}
+.dl + .dl{margin-top:12px}
+.rec{font-size:11px;font-weight:700;color:#1E6B37;background:var(--green-t);border:1px solid #CDEFD8;border-radius:999px;padding:2px 9px;margin-left:8px}
+
+/* 提示条 */
+.tip{border-radius:14px;padding:14px 16px;font-size:13px;line-height:1.75;margin-top:16px;border:1px solid}
+.tip.blue{background:var(--blue-t);border-color:#D6E7FF;color:#0B4A8F}
+.tip.orange{background:var(--orange-t);border-color:#FFE2B8;color:#8A5200}
+.tip.green{background:var(--green-t);border-color:#CDEFD8;color:#1E6B37}
+
+/* 表格 */
+table{width:100%;border-collapse:collapse;font-size:13.5px;margin-top:12px}
+th,td{text-align:left;padding:10px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+th{background:var(--grey-t);color:var(--text2);font-weight:600;font-size:12.5px}
+tr:last-child td{border-bottom:none}
+
+footer{margin-top:56px;border-top:1px solid var(--line);padding:28px 0 60px;text-align:center;color:var(--muted);font-size:12px;line-height:2}
+
+@media (max-width:760px){
+  .g3,.g2{grid-template-columns:1fr}
+  .hero{padding:36px 22px 32px;border-radius:20px}
+  .hero h1{font-size:28px}
+  .wrap{padding:0 16px}
+  .nav .inner{padding:11px 16px}
+  .nav .btn.ghost{display:none}
+}
+</style>
+</head>
+<body>
+
+<!-- 顶栏 -->
+<div class="nav">
+  <div class="inner">
+    <div class="brand">
+      <span class="mark">
+        <svg width="17" height="17" viewBox="0 0 40 40" fill="none" aria-hidden="true">
+          <path d="M8 12.5A5.5 5.5 0 0 1 13.5 7h13A5.5 5.5 0 0 1 32 12.5v9A5.5 5.5 0 0 1 26.5 27H19l-6.2 5.1A1.2 1.2 0 0 1 11 31.2V27a5.5 5.5 0 0 1-3-5.5v-9z" fill="#fff" fill-opacity=".95"/>
+          <path d="M15 13h10M15 18h6" stroke="#007AFF" stroke-width="2.6" stroke-linecap="round"/>
+        </svg>
+      </span>
+      ChatPilot 私信助手
+    </div>
+    <span class="sp"></span>
+    <a class="btn ghost sm" href="guide.html">使用说明</a>
+    <a class="btn primary sm" href="#download">下载插件</a>
+  </div>
+</div>
+
+<div class="wrap">
+
+  <!-- 首屏 -->
+  <header class="hero">
+    <div class="mark">
+      <svg width="42" height="42" viewBox="0 0 40 40" fill="none" aria-hidden="true">
+        <path d="M8 12.5A5.5 5.5 0 0 1 13.5 7h13A5.5 5.5 0 0 1 32 12.5v9A5.5 5.5 0 0 1 26.5 27H19l-6.2 5.1A1.2 1.2 0 0 1 11 31.2V27a5.5 5.5 0 0 1-3-5.5v-9z" fill="#fff" fill-opacity=".95"/>
+        <path d="M15 13h10M15 18h6" stroke="#007AFF" stroke-width="2.2" stroke-linecap="round"/>
+      </svg>
+    </div>
+    <h1>私信回复，有人替你先想好</h1>
+    <p class="sub">
+      装在自己电脑上的浏览器插件。打开 <b>TikTok</b> 或 <b>抖音</b> 的私信页，它会读取当前会话，
+      按你的人设一次给出 <b>5 条风格不同的中文回复</b>；挑一条，看一眼译文，粘贴发送即可。
+    </p>
+    <div class="cta">
+      <a class="btn primary" href="#download">⬇ 免费下载（v3.0.14）</a>
+      <a class="btn ghost" href="guide.html">📖 看图文使用说明</a>
+    </div>
+    <div class="badges">
+      <span class="pill">完全免费</span>
+      <span class="pill green">本地运行</span>
+      <span class="pill grey">Chrome / Edge</span>
+      <span class="pill grey">Windows · 约 5 分钟装好</span>
+    </div>
+  </header>
+
+  <!-- 特性 -->
+  <section>
+    <h2>它能帮你做什么</h2>
+    <p class="lead">解决私信沟通里最费时间的三件事：想说什么、怎么说像人话、怎么译得准。</p>
+    <div class="grid g3">
+      <div class="feat">
+        <div class="ic">💬</div>
+        <b>5 条中文候选</b>
+        <span>读完最近对话，一口气给 5 条风格各异的回复，不用对着输入框发呆。</span>
+      </div>
+      <div class="feat">
+        <div class="ic">🎭</div>
+        <b>多套人设</b>
+        <span>身份、语气、长短、禁忌都能设。不同账号不同人设，候选风格一键切换。</span>
+      </div>
+      <div class="feat">
+        <div class="ic">🌐</div>
+        <b>发送前翻译</b>
+        <span>候选永远先给中文（你看得懂、能改），发出前才译成对方语言，译文可微调。</span>
+      </div>
+      <div class="feat">
+        <div class="ic">🧭</div>
+        <b>自动判断对方语言</b>
+        <span>区分「粉丝说的」和「我说的」，按粉丝最新一条发言定语种，不再译错语言。</span>
+      </div>
+      <div class="feat">
+        <div class="ic">📚</div>
+        <b>话术库</b>
+        <span>把你的高频话术分组存好，搜索一键取用；AI 生成时也会参考这些话术的风格。</span>
+      </div>
+      <div class="feat">
+        <div class="ic">🪟</div>
+        <b>不遮挡聊天</b>
+        <span>面板挂在浏览器边缘或独立小窗，页面只留一个可拖动的迷你状态点。</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- 安装 -->
+  <section>
+    <h2>三步装好</h2>
+    <p class="lead">只做一次。装好后打开私信页就能用。</p>
+    <div class="card">
+      <ol class="steps">
+        <li><b>下载并运行安装包</b><span>点下面的下载按钮拿到 <code>ChatPilotSetup-3.0.14.exe</code>，双击一路「下一步」。装到用户目录，不需要管理员密码（SmartScreen 提示时点「更多信息 → 仍要运行」，因为安装包没有购买代码签名证书）。</span></li>
+        <li><b>重启浏览器</b><span>完全退出并重新打开 Chrome 或 Edge——安装包已通过「外部扩展」机制自动注册，重启后 ChatPilot 会自动出现在扩展列表，<b>不需要开发者模式、不需要手动加载</b>（个别环境没自动出现时，按安装包里的《加载扩展指南》30 秒手动加载即可）。AdsPower 等指纹浏览器请在各自「扩展中心 → 本地安装」上传 ChatPilot.crx。</span></li>
+        <li><b>填 Key 和客服编号</b><span>打开 TikTok 私信页，点扩展图标打开侧边栏：到 <code>platform.deepseek.com</code> 免费注册并创建 API Key 粘贴进去，再填一个全团队唯一的客服编号（如 ZHL）。都填完点「测试连接」。</span></li>
+      </ol>
+      <div class="tip orange">
+        <b>为什么需要你自己的 API Key？</b>插件靠大模型思考，每个人用<b>自己的</b> Key，费用各付各的，互相不受影响。
+        一次生成约 1~2 分钱，翻译不到 1 分钱——DeepSeek 首次充 10 元可以用很久。
+      </div>
+    </div>
+  </section>
+
+  <!-- 下载 -->
+  <section id="download">
+    <h2>下载</h2>
+    <p class="lead">安装包、CRX 包、图文说明，都在这里（当前版本 v3.0.14）。</p>
+
+    <a class="dl" href="download/ChatPilotSetup-3.0.14.exe" download>
+      <span class="ic">📦</span>
+      <span class="tx">
+        <b>Windows 安装包<span class="rec">必下</span></b>
+        <span>ChatPilotSetup-3.0.14.exe · 双击安装，重启浏览器即用（Win10 1809+/11）</span>
+      </span>
+      <span class="go">下载 →</span>
+    </a>
+
+    <a class="dl" href="download/ChatPilot-3.0.14.crx" download>
+      <span class="ic">🧩</span>
+      <span class="tx">
+        <b>CRX 包（AdsPower / 指纹浏览器用）</b>
+        <span>ChatPilot-3.0.14.crx · 在指纹浏览器「扩展中心 → 本地安装」上传</span>
+      </span>
+      <span class="go">下载 →</span>
+    </a>
+
+    <a class="dl" href="guide.html">
+      <span class="ic">📖</span>
+      <span class="tx">
+        <b>产品使用介绍（图文）<span class="rec">建议先看</span></b>
+        <span>安装、界面导览、语种判向、常见问题，含 7 张界面示意图</span>
+      </span>
+      <span class="go">打开 →</span>
+    </a>
+
+    <a class="dl" href="download/edge-setup-ChatPilot.reg" download>
+      <span class="ic">⚙️</span>
+      <span class="tx">
+        <b>Edge 一键设置（仅 Edge 用户）</b>
+        <span>双击导入后彻底解决「工具时好时坏、要按 F12 才活」</span>
+      </span>
+      <span class="go">下载 →</span>
+    </a>
+
+    <a class="dl" href="download/edge-restore.reg" download>
+      <span class="ic">↩️</span>
+      <span class="tx">
+        <b>还原 Edge 默认设置</b>
+        <span>只撤销上面那一项，其他浏览器设置分毫不动</span>
+      </span>
+      <span class="go">下载 →</span>
+    </a>
+
+    <div class="tip blue">
+      <b>Edge 用户请多花一分钟：</b>下载「Edge 一键设置」后双击导入（一路「是/确定」），
+      然后<b>完全退出 Edge</b>（右下角托盘图标也要右键关闭）再重新打开。
+      Edge 的「睡眠标签页 / 效率模式」会把私信页冻结，导致插件看似失灵——导入后即可根治。
+      生效后设置页若显示「由你的组织管理」，属正常现象。
+    </div>
+  </section>
+
+  <!-- 更新 -->
+  <section id="update">
+    <h2>以后怎么更新</h2>
+    <p class="lead">再下载一次新版安装包，双击装上（原地覆盖），重启浏览器就是新版。</p>
+    <div class="card">
+      <ol class="steps">
+        <li><b>下载上面的新版安装包</b><span>版本号以按钮上的为准，双击安装，会原地覆盖旧版文件（数据不受影响）。</span></li>
+        <li><b>重启浏览器</b><span>自动装载跟着新包走，重启即是新版；用开发者模式手动加载过的机器，到扩展页点一次 ChatPilot 卡片上的「刷新」⟳，再回聊天页按一下 <kbd>F5</kbd>。</span></li>
+      </ol>
+      <div class="tip green">
+        <b>不会丢任何东西：</b>API Key、人设、话术库、查重记录都存在浏览器和云端里，不在安装目录里——更新不会影响它们。
+      </div>
+    </div>
+  </section>
+
+  <!-- 安全说明 -->
+  <section>
+    <h2>关于安全与隐私</h2>
+    <div class="grid g2">
+      <div class="card">
+        <b>它不会做什么</b>
+        <p style="margin:8px 0 0;color:var(--text2);font-size:13.5px">
+          不替你按发送键（最后一步的粘贴与发送永远由你亲手完成）；
+          不上传你的聊天内容到任何服务器；不做批量群发、多账号切换这类操作。
+          所有配置只保存在你自己的浏览器里。
+        </p>
+      </div>
+      <div class="card">
+        <b>安装时浏览器会警告，是正常的</b>
+        <p style="margin:8px 0 0;color:var(--text2);font-size:13.5px">
+          它是未上架应用商店的本地扩展，所以浏览器会提示「可能不安全」。
+          代码就在解压出来的文件夹里，随时可查；介意的话先看 <code>src/</code> 目录再决定是否加载。
+        </p>
+      </div>
+    </div>
+    <div class="tip blue">
+      候选回复只是<b>建议</b>，发出前请过目。请遵守平台规则，不要用于骚扰或欺诈。
+    </div>
+  </section>
+
+  <!-- 常见问题 -->
+  <section>
+    <h2>常见问题</h2>
+    <div class="card">
+      <table>
+        <tr><th>现象</th><th>怎么解决</th></tr>
+        <tr><td>面板不出现 / 提示「未检测到聊天页面」</td><td>确认在 <code>tiktok.com/messages</code> 或 <code>douyin.com/chat</code>，并且<b>点进了一个会话</b>；刚更新过插件时按 <kbd>F5</kbd> 刷新页面</td></tr>
+        <tr><td>工具「不跟手」、要按 F12 才活</td><td>页面被浏览器冻结了。Edge 用户下载上面的「Edge 一键设置」导入即可根治</td></tr>
+        <tr><td>生成报错 401 / 402</td><td>401＝API Key 填错，重新粘贴；402＝DeepSeek 余额不足，充值即可</td></tr>
+        <tr><td>候选不够像人话</td><td>把人设写细（身份、语气、禁忌），并在话术库里多放些你常说的话</td></tr>
+        <tr><td>更新插件后好像没生效</td><td>更新后<b>所有已打开的聊天页都要按一次 F5</b>，页面里才会跑新脚本</td></tr>
+        <tr><td>出新版了，怎么升级？</td><td>用上面的「一键更新器」，双击一次即可；也可以到本页重新下载 zip 手动解压覆盖</td></tr>
+      </table>
+      <p style="margin:14px 0 0"><a class="btn ghost sm" href="guide.html">查看完整图文说明 →</a></p>
+    </div>
+  </section>
+
+  <footer>
+    ChatPilot 私信助手 · v3.0.14 ｜ 免费、本地运行、配置只存在你自己浏览器里<br>
+    候选仅为建议，发送前请过目；请遵守平台规则，不要用于骚扰或欺诈<br>
+    <a href="privacy.html" style="color:inherit">隐私政策</a>
+  </footer>
+</div>
+
+</body>
+</html>
