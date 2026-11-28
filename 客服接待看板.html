@@ -2740,9 +2740,9 @@ async function fetchLeadsAll(cap, onProgress) {
   const sc = leadScope(), L = state.leads, out = [];
   const q = leadEffQ();
   const limit = Math.max(1, Math.min(cap || LEAD_EXPORT_MAX, LEAD_EXPORT_MAX));
-  let off = 0, total = null;
+  let off = 0, total = null, hitLimit = false;
   for (;;) {
-    if (off >= limit) break;
+    if (off >= limit) { hitLimit = true; break; }
     const d = await rpc('board_leads', {
       p_token: Auth.token, p_from: sc.from, p_to: sc.to,
       p_agent: L.agent || null, p_type: L.type || null,
@@ -2758,8 +2758,8 @@ async function fetchLeadsAll(cap, onProgress) {
     if (!rows.length || out.length >= total) break;
   }
   const tot = (total === null ? out.length : total);
-  /* truncated=true：命中数超过导出上限，只拿到了前 limit 条 */
-  return { rows: out, total: tot, truncated: out.length < tot };
+  /* truncated=true：确实是因为撞到导出上限被砍（服务端中途返回空页不算） */
+  return { rows: out, total: tot, truncated: hitLimit && out.length < tot };
 }
 
 /* 文件名里的关键词：去掉路径/通配等非法字符，中文保留 */
