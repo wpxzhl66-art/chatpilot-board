@@ -269,6 +269,10 @@
   .sc.b3idle{border-left:3px solid #d97706}
   .b3foot{font-size:11.5px;color:var(--tx3);padding:8px 14px;border-top:1px dashed var(--line)}
   /* 记录管理（v1.8）：三列板工具条 + 卡片行内操作 */
+  /* v1.11：自动刷新状态条（侧栏档位下方，静默刷新的唯一可见痕迹） */
+  .pollstat{font-size:11.5px;color:var(--tx3);line-height:1.4}
+  .pollstat.bad{color:var(--red)}
+
   /* v1.8 记录管理：卡片行内操作（b3bar 工具条已并入折叠卡 summary，v1.10） */
   .sc .b3edit,.sc .b3del{cursor:pointer;user-select:none;font-size:11.5px;padding:2px 8px;border:1px solid var(--line);border-radius:6px;color:var(--tx2)}
   .sc .b3edit:hover{background:var(--card);color:var(--tx)}
@@ -602,7 +606,17 @@
     <div class="side-sec">操作</div>
     <div class="side-block">
       <button class="btn" id="btnCsv">导出 CSV</button>
-      <button class="btn primary" id="btnReload">刷新</button>
+    </div>
+    <div class="side-sec">自动刷新</div>
+    <div class="side-block">
+      <select class="btn" id="pollSec" title="每隔 X 秒自动静默刷新一次数据；失败自动保留上次数据，不打断操作">
+        <option value="0">关闭（仅进入时加载）</option>
+        <option value="15">每 15 秒</option>
+        <option value="30">每 30 秒</option>
+        <option value="60">每 1 分钟</option>
+        <option value="300">每 5 分钟</option>
+      </select>
+      <div class="pollstat" id="pollStat"></div>
     </div>
     <div class="side-foot">
       <div class="me" id="meBox"></div>
@@ -621,7 +635,6 @@
         <div class="grow"></div>
         <div class="ostats" id="onStats"></div>
         <select class="btn" id="onFilter" title="按员工筛选窗口" style="min-width:150px"></select>
-        <button class="btn" id="btnOnReload">刷新</button>
         <button class="btn primary" id="btnBindingAdd" style="display:none" title="手动登记「员工 ↔ 浏览器窗口」绑定">＋ 新增窗口</button>
       </div>
       <div class="card-b" style="padding-top:12px">
@@ -663,7 +676,6 @@
         <h2>待归属记录</h2>
         <span class="sub" id="pendSub"></span>
         <div class="grow"></div>
-        <button class="btn" id="btnPendReload">刷新</button>
       </summary>
       <div class="card-b" style="padding-top:12px">
         <div class="chart-scroll" id="pendWrap"></div>
@@ -684,7 +696,6 @@
           <option value="email">邮箱</option>
           <option value="phone">手机号</option>
         </select>
-        <button class="btn" id="btnLeadReload">刷新</button>
         <button class="btn" id="btnLeadCsv">导出 CSV</button>
       </summary>
       <div class="card-b" style="padding-top:10px">
@@ -726,7 +737,6 @@
               <button type="button" class="btn seg-b on" data-m="consult">有效咨询</button>
               <button type="button" class="btn seg-b" data-m="leads">留资数</button>
             </span>
-            <button class="btn" id="btnStatReload">刷新</button>
           </div>
           <div class="card-b" style="padding-top:12px">
             <div class="chart-scroll" id="statWrap"></div>
@@ -782,7 +792,8 @@
     </details>
 
     <div class="foot">
-      v1.10 优先级重排：在线窗口置顶（唯一默认展开），其余板块默认收起、点标题展开（展开状态本机记忆）<br>
+      v1.11 静默自动刷新：手动刷新按钮已移除，侧栏可选每 15 秒 / 30 秒 / 1 分钟 / 5 分钟自动刷新（失败保留上次数据，不打断操作） ·
+      优先级重排（v1.10）：在线窗口置顶（唯一默认展开），其余板块默认收起、点标题展开（展开状态本机记忆）<br>
       记录管理（v1.8）：管理员可在「在线窗口 / 接入记录 / 留资明细」直接 新增 / 编辑 / 删除，操作全部写入服务端审计 ·
       数据经服务端校验后返回 · 每行代表「某客服在某台浏览器上接待过某位粉丝」 ·
       同一粉丝被 2 个及以上客服编号接待过，会在「重复承接提醒」中标红列出
@@ -1107,7 +1118,7 @@ const state = {
   expanded: new Set(), loading: false,
   bindings: [], bindingsAt: 0, bindFilter: '', unassigned: [],
   stats: { consult: [], leads: [], at: 0 }, statMetric: 'consult',
-  leads: { rows: [], total: 0, key: '', loading: false, agent: '', type: '' }
+  leads: { rows: [], total: 0, key: '', loading: false, agent: '', type: '', gen: 0, _sig: '' }
 };
 
 const rowTime = (r) => state.metric === 'active' ? (r.last_active_at || r.first_seen_at) : (r.first_seen_at || r.last_active_at);
@@ -1120,35 +1131,55 @@ function banner(kind, html) {
       + '<div>' + html + '</div></div>' : '';
 }
 
-async function load() {
-  if (state.loading) return;
+/* v1.11：load(opts) 支持 silent——自动刷新走静默通道：
+ * 不弹横幅、失败保留旧数据（绝不清空）、内容没变不重绘（防闪烁）。 */
+let loadGen = 0;
+async function load(opts) {
+  const silent = !!(opts && opts.silent);
+  if (state.loading) return silent ? true : undefined;   // 单飞：在途跳过
   state.loading = true;
-  $('#btnReload').disabled = true;
-  banner('load', '正在读取接入记录…');
+  const gen = ++loadGen;                                  // 代次守卫：迟到响应丢弃
+  if (!silent) banner('load', '正在读取接入记录…');
   try {
     const d = await rpc('board_claims', { p_token: Auth.token });
+    if (gen !== loadGen) return true;
     if (!d.ok) {
-      banner('', '');
       if (d.error === 'unauthorized') { Auth.clear(); showLogin(); return; }
+      if (silent) return false;
+      banner('', '');
       throw new Error(errText(d.error));
     }
-    state.rows = Array.isArray(d.rows) ? d.rows : [];
+    const rows = Array.isArray(d.rows) ? d.rows : [];
+    const changed = JSON.stringify(rows) !== JSON.stringify(state.rows);
+    state.rows = rows;
     if (d.role) Auth.s.role = d.role;
     if (d.name) Auth.s.name = d.name;
     Auth.save(Auth.s);
     renderMe();
-    banner('', '');
-    if (!state.rows.length) {
-      banner('warn', '团队库里还没有任何接入记录。等有客服在私信页打开过粉丝后，这里就会有数据。');
+    if (silent) {
+      if (changed) recompute();
+      else {
+        /* 数据没变：只把展开着的接入记录三列板的「几分钟前」刷一下（小面板无闪烁） */
+        const f = document.querySelector('details[data-fold="claims"]');
+        if (f && f.open) renderBoard3();
+      }
+    } else {
+      banner('', '');
+      if (!state.rows.length) {
+        banner('warn', '团队库里还没有任何接入记录。等有客服在私信页打开过粉丝后，这里就会有数据。');
+      }
+      recompute();
     }
+    return true;
   } catch (e) {
+    if (silent) return false;   // 失败保留上一次有效数据，下一拍自动重试
     banner('err', '<b>读取失败：</b>' + esc(String(e.message || e))
       + '<br><span style="opacity:.8">排查：① 网络能否访问 supabase.co；② 数据库迁移是否已执行；③ 账号是否被停用。</span>');
     state.rows = [];
+    recompute();
+    return undefined;
   } finally {
     state.loading = false;
-    $('#btnReload').disabled = false;
-    recompute();
   }
 }
 
@@ -1185,20 +1216,35 @@ function bucketOf(r, now) {
   return (now - last > SESSION_IDLE_MS) ? 'closed' : 'idle';
 }
 
-async function loadBindings() {
-  if (!Auth.token) return;
+/* v1.11：静默模式——失败不动 #onSub、内容没变不重绘；用户正操作筛选下拉时
+ * 只把数据存入 state，DOM 留给 10 秒本地重绘兜底，避免打断操作。 */
+let bindLoading = false, bindGen = 0;
+async function loadBindings(opts) {
+  const silent = !!(opts && opts.silent);
+  if (!Auth.token) return silent ? false : undefined;
+  if (bindLoading) return silent ? true : undefined;     // 单飞
+  bindLoading = true;
+  const gen = ++bindGen;
   try {
     const d = await rpc('board_bindings', { p_token: Auth.token });
+    if (gen !== bindGen) return true;
     if (!d.ok) {
       if (d.error === 'unauthorized') { Auth.clear(); showLogin(); return; }
-      $('#onSub').textContent = '读取失败：' + errText(d.error);
-      return;
+      if (!silent) $('#onSub').textContent = '读取失败：' + errText(d.error);
+      return silent ? false : undefined;                 // 静默失败保留旧数据
     }
-    state.bindings = Array.isArray(d.rows) ? d.rows : [];
+    const rows = Array.isArray(d.rows) ? d.rows : [];
+    const changed = JSON.stringify(rows) !== JSON.stringify(state.bindings);
+    state.bindings = rows;
     state.bindingsAt = Date.now();
-    renderBindings();
+    if (silent && document.activeElement === $('#onFilter')) return true;
+    if (changed || !silent) renderBindings();
+    return true;
   } catch (e) {
-    $('#onSub').textContent = '读取失败：' + String(e.message || e);
+    if (!silent) $('#onSub').textContent = '读取失败：' + String(e.message || e);
+    return silent ? false : undefined;
+  } finally {
+    bindLoading = false;
   }
 }
 
@@ -1440,24 +1486,38 @@ for (const d of document.querySelectorAll('details.card[data-fold]')) {
 /* --------------------------------------------- 待归属记录（v1.4） */
 /* 数据源：board_unassigned —— 业务行里「员工不在名单 / 已停用」或「来源窗口不明」的记录。
  * 用途：v2.24.0 取消自动识别后，历史编号需要人工确认归属，这里给出待办清单。 */
-async function loadUnassigned() {
-  if (!Auth.token) return;
+/* v1.11：静默模式——失败保留旧数据；内容没变不重绘。 */
+let unassLoading = false, unassGen = 0;
+async function loadUnassigned(opts) {
+  const silent = !!(opts && opts.silent);
+  if (!Auth.token) return silent ? false : undefined;
+  if (unassLoading) return silent ? true : undefined;    // 单飞
+  unassLoading = true;
+  const gen = ++unassGen;
   const days = (state.days && state.days.length) ? [...state.days].sort() : [];
   // 用本地日期（不用 toISOString：UTC+8 会差一天）
   const to = days.length ? days[days.length - 1] : dayKey(new Date());
   const from = days.length ? days[0] : dayKey(new Date(Date.now() - 29 * 864e5));
   try {
     const d = await rpc('board_unassigned', { p_token: Auth.token, p_from: from, p_to: to });
+    if (gen !== unassGen) return true;
     if (!d.ok) {
       if (d.error === 'unauthorized') { Auth.clear(); showLogin(); return; }
-      $('#pendSub').textContent = '读取失败：' + errText(d.error);
-      return;
+      if (!silent) $('#pendSub').textContent = '读取失败：' + errText(d.error);
+      return silent ? false : undefined;
     }
-    state.unassigned = Array.isArray(d.rows) ? d.rows : [];
+    const rows = Array.isArray(d.rows) ? d.rows : [];
+    const changed = JSON.stringify(rows) !== JSON.stringify(state.unassigned);
+    if (silent && !changed) return true;                 // 没变化不重绘
+    state.unassigned = rows;
     renderUnassigned();
     renderBoard3();   // 待处理列的计数跟随待归属数据
+    return true;
   } catch (e) {
-    $('#pendSub').textContent = '读取失败：' + String(e.message || e);
+    if (!silent) $('#pendSub').textContent = '读取失败：' + String(e.message || e);
+    return silent ? false : undefined;                   // 静默失败保留旧数据
+  } finally {
+    unassLoading = false;
   }
 }
 
@@ -1494,13 +1554,76 @@ function renderUnassigned() {
     + '或用上方「＋ 新增接入记录」把历史粉丝重新登记到正确员工名下。</div>';
 }
 
-$('#btnOnReload').addEventListener('click', () => { loadBindings(); });
-$('#btnPendReload').addEventListener('click', () => { loadUnassigned(); });
-setInterval(() => {
-  if (document.hidden || !Auth.token || $('#appView').hidden) return;
-  loadBindings();
-  if (++statTick % STAT_POLL_EVERY === 0) { loadStats(); loadUnassigned(); }
-}, ONLINE_POLL_MS);
+/* ================= v1.11 静默自动刷新（调度器） =================
+ * 手动刷新按钮已全部移除（侧栏「自动刷新」档位替代）：
+ *  · 每拍静默刷新：接入记录 + 在线窗口 + 待归属；
+ *    统计报表 / 留资明细低频跟随（每 POLL_DEEP_EVERY 拍），控制请求量；
+ *  · 单飞：每个加载器自带 in-flight 锁，上一拍没回来就跳过，不并发冲突；
+ *  · 代次守卫：迟到响应直接丢弃，不会覆盖更新的数据；
+ *  · 内容比对：没变化不重绘（防闪烁），变化才重绘对应板块；
+ *  · 失败：保留上一次有效数据，状态条提示，下一拍自动重试；
+ *  · 弹窗 / 抽屉 / 日期面板打开或页面隐藏时暂停一轮，不打断用户操作。
+ * 10 秒本地重绘（v3.0.13）保持不变：纯渲染不发请求。 */
+const POLL_KEY = 'cp_board_poll_sec';
+const POLL_CHOICES = [0, 15, 30, 60, 300];
+const POLL_DEFAULT = 30;
+const POLL_DEEP_EVERY = 5;
+let pollSec = POLL_DEFAULT;
+try {
+  const raw = localStorage.getItem(POLL_KEY);   // 注意：无存档时 getItem 为 null，Number(null)=0 会被误判为「关闭」档
+  const v = raw === null ? NaN : Number(raw);
+  if (POLL_CHOICES.includes(v)) pollSec = v;
+} catch (e) { /* 隐私模式等：用默认档位 */ }
+let pollTimer = 0, pollTick = 0, pollFailStreak = 0;
+
+function pollStat(text, bad) {
+  const el = $('#pollStat');
+  if (el) { el.textContent = text; el.classList.toggle('bad', !!bad); }
+}
+function pollBusy() {
+  return document.hidden || !Auth.token || $('#appView').hidden
+    || !$('#recModal').hidden || !$('#drawer').hidden
+    || !$('#pwdModal').hidden || !datePop.hidden;
+}
+function pollMark(ok) {
+  const d = new Date();
+  const t = pad2(d.getHours()) + ':' + pad2(d.getMinutes()) + ':' + pad2(d.getSeconds());
+  if (ok) {
+    pollFailStreak = 0;
+    pollStat('最近刷新 ' + t);
+  } else {
+    pollFailStreak++;
+    pollStat(t + ' 刷新失败 · 已保留上次数据' + (pollFailStreak > 1 ? '（连续 ' + pollFailStreak + ' 次）' : ''), true);
+  }
+}
+async function autoTick() {
+  if (pollBusy()) return;
+  pollTick++;
+  const deep = pollTick % POLL_DEEP_EVERY === 0;
+  const rs = await Promise.allSettled([
+    load({ silent: true }),
+    loadBindings({ silent: true }),
+    loadUnassigned({ silent: true }),
+    deep ? loadStats({ silent: true }) : Promise.resolve(true),
+    deep ? loadLeads(false, { silent: true }) : Promise.resolve(true)
+  ]);
+  pollMark(!rs.some((r) => r.status === 'rejected' || r.value === false));
+}
+function applyPollSetting() {
+  const sel = $('#pollSec');
+  if (sel) sel.value = String(pollSec);
+  if (pollTimer) { clearInterval(pollTimer); pollTimer = 0; }
+  if (!pollSec) { pollStat('自动刷新已关闭'); return; }
+  pollStat('每 ' + (pollSec < 60 ? pollSec + ' 秒' : (pollSec / 60) + ' 分钟') + '自动刷新');
+  pollTimer = setInterval(autoTick, pollSec * 1000);
+}
+$('#pollSec')?.addEventListener('change', (e) => {
+  pollSec = Number(e.target.value) || 0;
+  try { localStorage.setItem(POLL_KEY, String(pollSec)); } catch (e2) { /* 隐私模式忽略 */ }
+  applyPollSetting();
+  if (pollSec) autoTick();   // 换档后立即来一拍
+});
+applyPollSetting();
 
 /* v3.0.13：在线状态的本地及时重渲染——阈值只有 1 分钟，等 60 秒的网络轮询
  * 才翻状态太迟钝。这里每 10 秒用已拉取的 state.bindings 现算重画（纯渲染，
@@ -1521,29 +1644,41 @@ setInterval(() => {
  *     按「当日留资粉丝数」汇总（同一粉丝同日交出多类联系方式只算 1）。
  * 扩展 v2.22.0+ 自动上报；这里一次取 180 天，前端按当前范围（state.days）过滤。 */
 const STAT_WINDOW_DAYS = 180;
-const STAT_POLL_EVERY = 5;      // 在线状态每分钟轮询，统计每 5 拍（约 5 分钟）跟随刷新
+const STAT_POLL_EVERY = 5;      // v1.11 起由 POLL_DEEP_EVERY 接管低频节奏（保留常量备查）
 
-async function loadStats() {
-  if (!Auth.token) return;
+/* v1.11：静默模式——失败保留旧数据；内容没变不重绘（防闪烁）。 */
+let statsLoading = false, statsGen = 0;
+async function loadStats(opts) {
+  const silent = !!(opts && opts.silent);
+  if (!Auth.token) return silent ? false : undefined;
+  if (statsLoading) return silent ? true : undefined;    // 单飞
+  statsLoading = true;
+  const gen = ++statsGen;
   try {
     const d = await rpc('board_stats', {
       p_token: Auth.token,
       p_from: addDays(todayKey(), -STAT_WINDOW_DAYS),
       p_to: todayKey()
     });
+    if (gen !== statsGen) return true;
     if (!d.ok) {
       if (d.error === 'unauthorized') { Auth.clear(); showLogin(); return; }
-      $('#statSub').textContent = '读取失败：' + errText(d.error);
-      return;
+      if (!silent) $('#statSub').textContent = '读取失败：' + errText(d.error);
+      return silent ? false : undefined;
     }
-    state.stats = {
-      consult: Array.isArray(d.consult) ? d.consult : [],
-      leads: Array.isArray(d.leads) ? d.leads : [],
-      at: Date.now()
-    };
+    const consult = Array.isArray(d.consult) ? d.consult : [];
+    const leads = Array.isArray(d.leads) ? d.leads : [];
+    const sig = JSON.stringify([consult, leads]);
+    if (silent && sig === state._statsSig) return true;  // 没变化不重绘
+    state._statsSig = sig;
+    state.stats = { consult, leads, at: Date.now() };
     renderStats();
+    return true;
   } catch (e) {
-    $('#statSub').textContent = '读取失败：' + String(e.message || e);
+    if (!silent) $('#statSub').textContent = '读取失败：' + String(e.message || e);
+    return silent ? false : undefined;                   // 静默失败保留旧数据
+  } finally {
+    statsLoading = false;
   }
 }
 
@@ -1607,7 +1742,6 @@ function renderStats() {
     + '<td class="tt">' + grand + '</td></tr></tfoot></table>';
 }
 
-$('#btnStatReload').addEventListener('click', loadStats);
 $('#statMetric').addEventListener('click', (e) => {
   const b = e.target.closest('.seg-b');
   if (!b) return;
@@ -1615,10 +1749,9 @@ $('#statMetric').addEventListener('click', (e) => {
   document.querySelectorAll('#statMetric .seg-b').forEach((x) => x.classList.toggle('on', x === b));
   renderStats();
 });
-let statTick = 0;
+let statTick = 0;   // v1.11 起轮询调度由 autoTick 接管
 
 /* 留资明细 / 重复承接导出（v1.3） */
-$('#btnLeadReload').addEventListener('click', () => loadLeads(false));
 $('#btnLeadMore').addEventListener('click', () => loadLeads(true));
 $('#btnLeadCsv').addEventListener('click', exportLeadsCsv);
 $('#btnConflictCsv').addEventListener('click', exportConflictsCsv);
@@ -1721,7 +1854,7 @@ function recompute(keepScroll) {
   state.agg = aggregate(rows);
   if (state.agent && !state.agg.agents.has(state.agent)) state.agent = null;
   renderKpis(rows); renderChart(); renderAgents(); renderDetail(); renderAllTable(); renderConflicts(); renderDayChip(); renderStats(); syncLeads(); renderBoard3();
-  loadUnassigned();   // v1.4：待归属跟随日期范围
+  loadUnassigned({ silent: true });   // v1.4：待归属跟随日期范围（v1.11：静默，失败保留旧数据）
   if (keepScroll) window.scrollTo(0, y);
 }
 
@@ -2149,35 +2282,52 @@ function fillLeadAgents() {
   else { el.value = ''; state.leads.agent = ''; }
 }
 
-async function loadLeads(more) {
-  if (!Auth.token) return;
+/* v1.11：静默模式——不发「读取中」占位（不闪烁）、失败保留旧数据；
+ * 迟到响应/范围已变的结果直接丢弃，不会覆盖更新的数据。 */
+async function loadLeads(more, opts) {
+  if (!Auth.token) return false;
+  const silent = !!(opts && opts.silent);
   const L = state.leads;
-  if (L.loading) return;
+  if (L.loading) return silent ? true : undefined;       // 单飞：在途跳过
   const sc = leadScope();
-  if (!more) { L.rows = []; L.key = sc.key; }
+  if (!more && !silent) { L.rows = []; L.key = sc.key; }
+  const gen = ++L.gen;
   L.loading = true;
   const box = $('#leadWrap');
-  if (!more) box.innerHTML = '<div class="empty"><span class="spin dark" style="display:inline-block"></span> 读取中…</div>';
+  if (!more && !silent) box.innerHTML = '<div class="empty"><span class="spin dark" style="display:inline-block"></span> 读取中…</div>';
   try {
     const d = await rpc('board_leads', {
       p_token: Auth.token, p_from: sc.from, p_to: sc.to,
       p_agent: L.agent || null, p_type: L.type || null,
       p_limit: LEAD_PAGE, p_offset: more ? L.rows.length : 0
     });
+    if (gen !== L.gen || (!more && sc.key !== leadScope().key)) return true;   // 迟到响应丢弃
     if (!d.ok) {
       if (d.error === 'unauthorized') { Auth.clear(); showLogin(); return; }
+      if (silent) return false;                          // 静默失败保留旧数据
       box.innerHTML = '<div class="empty">' + esc(leadErrText(d.error)) + '</div>';
       $('#leadSub').textContent = '';
-      return;
+      return undefined;
     }
     const rows = Array.isArray(d.rows) ? d.rows : [];
-    L.rows = more ? L.rows.concat(rows) : rows;
-    L.total = typeof d.total === 'number' ? d.total : L.rows.length;
+    const total = typeof d.total === 'number' ? d.total : rows.length;
+    if (silent && !more) {
+      const sig = JSON.stringify(rows);
+      if (sig === L._sig && total === L.total) return true;   // 没变化不重绘
+      L._sig = sig;
+      L.rows = rows;
+    } else {
+      L.rows = more ? L.rows.concat(rows) : rows;
+    }
+    L.total = total;
     renderLeads();
+    return true;
   } catch (e) {
+    if (silent) return false;
     box.innerHTML = '<div class="empty">读取失败：' + esc(String(e.message || e))
       + '<br><span style="opacity:.75">若是「函数不存在」，说明数据库迁移 v2.23.0 还没执行。</span></div>';
     $('#leadSub').textContent = '';
+    return undefined;
   } finally {
     L.loading = false;
   }
@@ -2186,6 +2336,10 @@ async function loadLeads(more) {
 function renderLeads() {
   const L = state.leads, box = $('#leadWrap'), sub = $('#leadSub');
   fillLeadAgents();
+  /* v1.11：内容没变不重绘（防自动刷新闪烁）；身份变会改操作列，一并入签名 */
+  const rsig = JSON.stringify([L.rows, L.total, Auth.isAdmin]);
+  if (rsig === L._renderSig) return;
+  L._renderSig = rsig;
   if (!L.rows.length) {
     box.innerHTML = '<div class="empty">当前范围内没有留资记录'
       + '<br><span style="opacity:.75">留资由扩展 v2.22.0+ 从粉丝消息里自动识别（WhatsApp / Telegram / IG / 邮箱 / 手机号）</span></div>';
@@ -3131,7 +3285,6 @@ document.querySelectorAll('#metricSeg button').forEach((b) => {
     recompute();
   });
 });
-$('#btnReload').addEventListener('click', load);
 $('#btnCsv').addEventListener('click', exportCsv);
 $('#btnProv').addEventListener('click', () => {
   state.showProv = !state.showProv;
