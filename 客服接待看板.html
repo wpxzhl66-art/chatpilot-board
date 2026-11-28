@@ -273,6 +273,30 @@
   .pollstat{font-size:11.5px;color:var(--tx3);line-height:1.4}
   .pollstat.bad{color:var(--red)}
 
+  /* v1.12 P0 批次：KPI 摘要条 / 标题角标闪烁 / 新会话标签 / 全局搜索 / 行高亮 */
+  .kstrip{display:flex;gap:8px;overflow-x:auto;margin-bottom:16px;padding:2px}
+  .kstrip .kcap{flex:1 0 96px;display:flex;flex-direction:column;align-items:flex-start;gap:2px;
+    background:var(--card);border:1px solid var(--line);border-radius:10px;padding:10px 14px;
+    cursor:pointer;font:inherit;text-align:left;transition:border-color .15s, box-shadow .15s}
+  .kstrip .kcap:hover{border-color:#c9d2dd;box-shadow:0 1px 6px rgba(15,23,42,.06)}
+  .kstrip .kcap.warn{border-color:#f1b8b8;background:#fff7f7}
+  .kstrip .kv{font-size:20px;font-weight:700;line-height:1.1;color:var(--tx)}
+  .kstrip .kk{font-size:11.5px;color:var(--tx3)}
+  @keyframes cpBump{0%,100%{box-shadow:0 0 0 0 rgba(220,38,38,0)}25%,65%{box-shadow:0 0 0 4px rgba(220,38,38,.22)}}
+  details.card>summary.bump{animation:cpBump 1.1s ease 2}
+  @keyframes cpHit{0%,100%{background:transparent}30%,70%{background:#fff3c4}}
+  .row-hit{animation:cpHit 1.6s ease 1}
+  .ktag{display:inline-block;font-size:10.5px;padding:1px 7px;border-radius:999px;
+    background:#fff1e0;color:#b45309;border:1px solid #fcd9a8;white-space:nowrap}
+  .searchpop{max-height:320px;overflow:auto;z-index:60}
+  .searchpop .sp-h{font-size:10.5px;color:var(--tx3);letter-spacing:1px;padding:8px 12px 4px}
+  .searchpop .sp-i{display:block;width:100%;border:0;background:transparent;text-align:left;
+    padding:8px 12px;cursor:pointer;font:inherit;font-size:12.5px;border-top:1px solid var(--line)}
+  .searchpop .sp-i:hover{background:#f6f8fa}
+  .searchpop .sp-i .tag{margin-right:6px}
+  .searchpop .sp-sub{display:block;font-size:11px;color:var(--tx3);margin-top:2px}
+  .searchpop .sp-empty{padding:14px 12px;font-size:12.5px;color:var(--tx3)}
+
   /* v1.8 记录管理：卡片行内操作（b3bar 工具条已并入折叠卡 summary，v1.10） */
   .sc .b3edit,.sc .b3del{cursor:pointer;user-select:none;font-size:11.5px;padding:2px 8px;border:1px solid var(--line);border-radius:6px;color:var(--tx2)}
   .sc .b3edit:hover{background:var(--card);color:var(--tx)}
@@ -553,6 +577,12 @@
       <span class="logo">CP</span>
       <span class="nm">客服接待看板<small>ChatPilot</small></span>
     </div>
+    <div class="side-sec">搜索</div>
+    <div class="side-block" style="position:relative">
+      <input class="input" id="globalSearch" type="search" autocomplete="off"
+             placeholder="搜粉丝 @ID / 名称 / 联系方式" />
+      <div class="datepop searchpop" id="searchPop" hidden></div>
+    </div>
     <div class="side-sec">统计范围</div>
     <div class="side-block" id="rangeBlock">
       <div class="seg vert" id="rangeSeg">
@@ -628,6 +658,9 @@
 
     <!-- v1.10 优先级重排：在线窗口置顶（唯一默认展开）；其余板块默认收起、点标题展开，
          展开状态记入 localStorage。收起时计数/副标题仍显示在标题行，数据照常加载。 -->
+    <!-- v1.12：常驻 KPI 摘要条——折叠布局下第一眼可见的全局数字（口径固定为「今日」，不随侧栏范围变） -->
+    <div class="kstrip" id="kpiStrip" aria-label="今日概览"></div>
+
     <section class="card">
       <div class="card-h">
         <h2>在线窗口（员工 ↔ 浏览器）</h2>
@@ -792,7 +825,9 @@
     </details>
 
     <div class="foot">
-      v1.11 静默自动刷新：手动刷新按钮已移除，侧栏可选每 15 秒 / 30 秒 / 1 分钟 / 5 分钟自动刷新（失败保留上次数据，不打断操作） ·
+      v1.12 盯盘效率：常驻 KPI 摘要条（今日接待/留资/有效咨询/新会话/待归属/撞单，点击跳转） · 全局搜索（侧栏搜粉丝/窗口/联系方式，直达并高亮） ·
+      待处理/撞单增加时板块闪烁 + 浏览器标签页角标 (n) · 新会话队列（近 30 分钟有动静的未转正会话，纯现有数据推算）<br>
+      静默自动刷新（v1.11）：手动刷新按钮已移除，侧栏可选每 15 秒 / 30 秒 / 1 分钟 / 5 分钟自动刷新（失败保留上次数据，不打断操作） ·
       优先级重排（v1.10）：在线窗口置顶（唯一默认展开），其余板块默认收起、点标题展开（展开状态本机记忆）<br>
       记录管理（v1.8）：管理员可在「在线窗口 / 接入记录 / 留资明细」直接 新增 / 编辑 / 删除，操作全部写入服务端审计 ·
       数据经服务端校验后返回 · 每行代表「某客服在某台浏览器上接待过某位粉丝」 ·
@@ -1324,7 +1359,7 @@ function renderBindings() {
     const t2 = b.lastMs
       ? esc(fmtDateTime(b.last_seen_at)) + '<span class="sub2">' + esc(fmtAgo(b.last_seen_at)) + '</span>'
       : '从未上报';
-    return '<div class="ocard ' + (b.on ? 'on' : 'off') + '" data-agent="' + esc(b.agent_id || '') + '"'
+    return '<div class="ocard ' + (b.on ? 'on' : 'off') + '" data-agent="' + esc(b.agent_id || '') + '" data-bid="' + esc(b.browser_id || '') + '"'
       + ' title="员工：' + esc(name) + '\n窗口：' + esc(win) + '\n窗口 ID：' + esc(b.browser_id || '') + '">'
       + '<div class="oav" style="background:' + c + '">' + ini + '</div>'
       + '<div class="oi"><div class="n">' + esc(name) + staffStatusTag(b) + '</div>'
@@ -1386,10 +1421,11 @@ function b3Card(r, kind) {
     ? '<span class="b3edit" data-cop="edit" data-cid="' + esc(r.id) + '">编辑</span>'
       + '<span class="b3del" data-cop="del" data-cid="' + esc(r.id) + '">删除</span>'
     : '';
-  return '<div class="sc' + (kind === 'active' ? ' b3now' : kind === 'idle' ? ' b3idle' : '') + '">'
+  return '<div class="sc' + (kind === 'active' ? ' b3now' : kind === 'idle' ? ' b3idle' : '') + '" data-peer="' + esc(r.peer_key || '') + '">'
     + '<div class="sc-h"><span class="ph">@' + esc(r.peer_key || '') + '</span>'
     + (name ? '<b title="' + esc(name) + '">' + esc(name) + '</b>' : '')
-    + (kind === 'idle' ? ' <span class="tag live">超时</span>' : '') + st + '</div>'
+    + (kind === 'idle' ? ' <span class="tag live">超时</span>' : '')
+    + (kind === 'fresh' ? ' <span class="ktag">新会话·等待跟进</span>' : '') + st + '</div>'
     + '<div class="sc-m">' + esc(who) + ' · 最近活动 ' + esc(fmtAgo(last) || '时间未记录') + '</div>'
     + '<div class="sc-a"><span class="b3copy" data-v="' + esc(r.peer_key || '') + '" title="复制 @ID">复制@ID</span>' + ops + '</div>'
     + '</div>';
@@ -1427,11 +1463,22 @@ function renderBoard3() {
 
   const p = document.getElementById('bPend');
   if (p) {
-    p.innerHTML = (state.unassigned || []).length
-      ? '<div class="b3empty">' + esc(String((state.unassigned).length)) + ' 组记录员工不在名单或窗口不明，'
-        + '明细在下方「待归属记录」板块处理。</div>'
-      + '<div class="b3empty">「粉丝在排队等接待」要等扩展上报会话状态后才能显示（暂无此数据，不显示假数字）。</div>'
-      : '<div class="b3empty">没有待归属记录。「粉丝在排队等接待」要等扩展上报会话状态后才能显示（暂无此数据，不显示假数字）。</div>';
+    /* v1.12：待处理列 = 待归属提示 + 新会话队列（现有数据推算，不造假数字）。
+     * 新会话 = 未转正（is_provisional）且在线（expires_at 未过期）且近 30 分钟有动静
+     * 的粉丝会话——这类会话客服刚打开还没登记，最可能正在等待回复。 */
+    const fresh = freshSessions(now);
+    let html = '';
+    if ((state.unassigned || []).length) {
+      html += '<div class="b3empty">' + esc(String((state.unassigned).length)) + ' 组记录员工不在名单或窗口不明，'
+        + '明细在下方「待归属记录」板块处理。</div>';
+    }
+    html += fresh.length
+      ? fresh.slice(0, 8).map((r) => b3Card(r, 'fresh')).join('')
+        + (fresh.length > 8 ? '<div class="b3empty">还有 ' + (fresh.length - 8) + ' 个新会话未列出（按最近动静排序）。</div>' : '')
+      : '<div class="b3empty">当前没有近 30 分钟内有动静的新粉丝会话。</div>';
+    p.innerHTML = html;
+    bumpIf('claims', fresh.length + g.active.length + g.idle.length + (state.unassigned || []).length,
+      'details[data-fold="claims"] > summary');
   }
 
   const mk = (list, kind) => list.length
@@ -1450,6 +1497,7 @@ function renderBoard3() {
     note.style.display = g.closed.length ? '' : 'none';
     note.textContent = '今日已结束 ' + g.closed.length + ' 个会话（明细见下方统计板块）';
   }
+  renderKpiStrip();   // v1.12：KPI 摘要条随接入数据联动（签名比对，没变不重绘）
 }
 
 /* 复制按钮事件委托（卡片是重画的，挂容器上）；v1.8：接入记录 编辑/删除 同走这里 */
@@ -1482,6 +1530,210 @@ for (const d of document.querySelectorAll('details.card[data-fold]')) {
     try { localStorage.setItem(FOLD_KEY, JSON.stringify(foldState)); } catch (e2) { /* 隐私模式忽略 */ }
   });
 }
+
+/* ================= v1.12 P0 批次 =================
+ * 1) KPI 摘要条：今日接待 / 今日留资 / 今日有效咨询 / 新会话 / 待归属 / 撞单；
+ *    口径固定为「今日」，不随侧栏日期范围变；无统计数据显示 – 不造假 0。
+ * 2) 标题角标：(n) 前缀 = 新会话 + 撞单；数据变化才更新。
+ * 3) 闪烁提醒：折叠卡计数增加时 summary 闪两下（首次加载不闪）。
+ * 4) 新会话队列：未转正 + 在线 + 近 30 分钟有动静（现有字段推算，无需扩展上报）。
+ * 5) 全局搜索：搜已加载数据（接入记录/全部粉丝/在线窗口/留资已加载页），点击跳转高亮。 */
+const KPI_FRESH_MS = 30 * 60 * 1000;
+function freshSessions(now) {
+  const out = [];
+  for (const r of state.rows || []) {
+    if (!isLiveProv(r)) continue;
+    const last = parseTs(r.last_active_at || r.first_seen_at);
+    if (!last || now - last > KPI_FRESH_MS) continue;
+    out.push(r);
+  }
+  out.sort((a, b) => parseTs(b.last_active_at || b.first_seen_at) - parseTs(a.last_active_at || a.first_seen_at));
+  return out;
+}
+function conflictCount() {
+  let n = 0;
+  const peers = state.agg && state.agg.peers;
+  if (peers) for (const p of peers.values()) if (p.agents.size > 1) n++;
+  return n;
+}
+/* 今日统计：board_stats 返回 180 天每日桶，取今天那项；无数据返回 null（显示 –） */
+function todayStatSum(kind) {
+  const t = todayKey();
+  let s = 0, any = false;
+  for (const r of (state.stats && state.stats[kind]) || []) {
+    if (r && r.stat_date === t) { s += Number(kind === 'leads' ? (r.leads || 0) : (r.valid_consults || 0)); any = true; }
+  }
+  return any ? s : null;
+}
+const BASE_TITLE = document.title;
+function updateTitleBadge() {
+  const n = freshSessions(Date.now()).length + conflictCount();
+  document.title = n > 0 ? '(' + n + ') ' + BASE_TITLE : BASE_TITLE;
+}
+const bumpPrev = {};
+function bumpIf(key, val, sel) {
+  const el = typeof sel === 'string' ? document.querySelector(sel) : sel;
+  if (!el) return;
+  const prev = bumpPrev[key];
+  bumpPrev[key] = val;
+  if (prev === undefined || val <= prev) return;             // 首次渲染只记录；减少/持平不闪
+  el.classList.remove('bump');
+  void el.offsetWidth;                                       // 重启动画
+  el.classList.add('bump');
+  el.addEventListener('animationend', () => el.classList.remove('bump'), { once: true });
+}
+const kpiSig = { v: '' };
+function renderKpiStrip() {
+  const el = $('#kpiStrip');
+  if (!el) return;
+  const now = Date.now();
+  const freshN = freshSessions(now).length;
+  const todayRec = new Set();
+  for (const r of state.rows || []) {
+    if (isDeadProv(r)) continue;
+    const t = parseTs(r.last_active_at || r.first_seen_at);
+    if (t && dayKey(new Date(t)) === todayKey()) todayRec.add(r.peer_key);
+  }
+  const pend = (state.unassigned || []).length;
+  const conf = conflictCount();
+  const leads = todayStatSum('leads');
+  const consult = todayStatSum('consult');
+  const sig = JSON.stringify([todayRec.size, leads, consult, pend, conf, freshN]);
+  updateTitleBadge();
+  if (sig === kpiSig.v) return;
+  kpiSig.v = sig;
+  const cap = (k, v, warn, sec, f) =>
+    '<button type="button" class="kcap' + (warn ? ' warn' : '') + '" data-jump="' + sec + '" title="' + esc(f) + '">'
+    + '<span class="kv">' + (v === null ? '–' : v) + '</span><span class="kk">' + esc(k) + '</span></button>';
+  el.innerHTML =
+    cap('今日接待', todayRec.size, false, 'claims', '今天有动静的独立粉丝数（不随左侧日期范围变）')
+    + cap('今日留资', leads, false, 'stats', '今天交出联系方式的粉丝数（无数据显示 –）')
+    + cap('今日有效咨询', consult, false, 'stats', '今天正式登记的会话数（无数据显示 –）')
+    + cap('新会话', freshN, freshN > 0, 'claims', '近 30 分钟有动静、尚未转正的新粉丝会话——最可能正在等待回复')
+    + cap('待归属', pend, pend > 0, 'pend', '员工不在名单或窗口不明的记录组数')
+    + cap('撞单', conf, conf > 0, 'conflict', '被 2 个及以上客服接待过的粉丝数');
+}
+$('#kpiStrip')?.addEventListener('click', (e) => {
+  const cap = e.target.closest('.kcap');
+  if (!cap) return;
+  const fold = cap.dataset.jump ? document.querySelector('details[data-fold="' + cap.dataset.jump + '"]') : null;
+  if (fold) fold.open = true;
+  const target = fold || cap;
+  try { target.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch (e2) { /* 老浏览器忽略 */ }
+});
+
+/* ---------------- v1.12 全局搜索 ---------------- */
+const searchInput = $('#globalSearch'), searchPop = $('#searchPop');
+let searchTimer = 0, searchRes = [];
+function searchAll(qRaw) {
+  const q = String(qRaw || '').trim().toLowerCase();
+  if (q.length < 2) return [];
+  const toks = q.split(/\s+/);
+  const hit = (...fields) => toks.every((t) => fields.some((f) => String(f || '').toLowerCase().includes(t)));
+  const res = [];
+  const seen = new Set();
+  const cap = () => res.length >= 20;
+  /* 1) 接入记录（全量） */
+  for (const r of state.rows || []) {
+    const k = String(r.peer_key || '');
+    if (k && !seen.has('c|' + k) && hit(k, r.peer_name, r.agent_id, r.staff_name)) {
+      seen.add('c|' + k);
+      res.push({ sec: '接入记录', fold: 'claims', anchor: '.sc[data-peer="' + k + '"]', key: k,
+        name: r.peer_name || '', who: r.staff_name || r.agent_id || '', t: r.last_active_at || r.first_seen_at });
+    }
+    if (cap()) return res;
+  }
+  /* 2) 全部粉丝（agg 全量） */
+  if (state.agg) for (const pe of state.agg.peers.values()) {
+    if (!seen.has('c|' + pe.key) && !seen.has('a|' + pe.key)
+      && hit(pe.key, pe.name, [...pe.agents].join(' '))) {
+      seen.add('a|' + pe.key);
+      res.push({ sec: '全部粉丝', fold: 'all', anchor: '#allWrap tr[data-peer="' + pe.key + '"]', key: pe.key,
+        name: pe.name || '', who: [...pe.agents].join('、'), t: pe.lastAt ? new Date(pe.lastAt).toISOString() : '' });
+    }
+    if (cap()) return res;
+  }
+  /* 3) 在线窗口 */
+  for (const b of state.bindings || []) {
+    const bid = String(b.browser_id || '');
+    if (bid && !seen.has('o|' + bid) && hit(b.browser_label, b.staff_name, b.agent_id, bid)) {
+      seen.add('o|' + bid);
+      res.push({ sec: '在线窗口', fold: null, anchor: '.ocard[data-bid="' + bid + '"]', key: bid,
+        name: String(b.browser_label || '').trim() || '未命名窗口', who: staffName(b), t: b.last_seen_at });
+    }
+    if (cap()) return res;
+  }
+  /* 4) 留资明细（仅已加载页） */
+  for (const r of state.leads.rows || []) {
+    const k = String(r.peer_key || '');
+    const uk = 'l|' + k + '|' + String(r.lead_value || '');
+    if (!seen.has(uk) && hit(k, r.peer_name, r.lead_value, r.agent_id, leadTypeText(r.lead_type))) {
+      seen.add(uk);
+      res.push({ sec: '留资明细', fold: 'lead', anchor: '#leadWrap tr[data-peer="' + k + '"]', key: k,
+        name: r.peer_name || '', who: leadTypeText(r.lead_type) + '：' + (r.lead_value || ''), t: r.captured_at });
+    }
+    if (cap()) return res;
+  }
+  return res;
+}
+function hideSearchPop() { if (searchPop) searchPop.hidden = true; }
+function renderSearchPop(list, q) {
+  if (!searchPop) return;
+  if (!q || q.trim().length < 2) { hideSearchPop(); return; }
+  let html = list.length
+    ? list.map((r, i) =>
+        '<button type="button" class="sp-i" data-ri="' + i + '">'
+        + '<span class="tag">' + esc(r.sec) + '</span><b>' + esc(r.name || r.key) + '</b>'
+        + (r.name && r.key && r.name !== r.key ? ' <span class="muted">@' + esc(r.key) + '</span>' : '')
+        + '<span class="sp-sub">' + esc(r.who || '') + (r.t ? ' · ' + (esc(fmtAgo(r.t)) || '') : '') + '</span>'
+        + '</button>').join('')
+    : '<div class="sp-empty">没有匹配「' + esc(q.trim()) + '」的记录</div>';
+  if ((state.leads.total || 0) > state.leads.rows.length)
+    html += '<div class="sp-empty">留资明细仅搜索已加载的 ' + state.leads.rows.length + ' / ' + state.leads.total + ' 条</div>';
+  searchPop.innerHTML = html;
+  searchPop.hidden = false;
+}
+function jumpToResult(r) {
+  hideSearchPop();
+  if (searchInput) searchInput.blur();
+  const fold = r.fold ? document.querySelector('details[data-fold="' + r.fold + '"]') : null;
+  if (fold) fold.open = true;
+  let el = null;
+  if (r.anchor) { try { el = document.querySelector(r.anchor); } catch (e) { el = null; } }
+  const target = el || fold;
+  if (target) { try { target.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch (e2) { /* 忽略 */ } }
+  if (el) {
+    el.classList.remove('row-hit');
+    void el.offsetWidth;
+    el.classList.add('row-hit');
+    el.addEventListener('animationend', () => el.classList.remove('row-hit'), { once: true });
+  }
+}
+if (searchInput) {
+  searchInput.addEventListener('input', () => {
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(() => {
+      const q = searchInput.value;
+      if (q.trim().length < 2) { hideSearchPop(); return; }
+      searchRes = searchAll(q);
+      renderSearchPop(searchRes, q);
+    }, 160);
+  });
+  searchInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') e.preventDefault(); });
+}
+searchPop?.addEventListener('click', (e) => {
+  const b = e.target.closest('.sp-i');
+  if (!b) return;
+  const r = searchRes[Number(b.dataset.ri)];
+  if (r) jumpToResult(r);
+});
+document.addEventListener('click', (e) => {
+  if (searchPop && !searchPop.hidden && !e.target.closest('#searchPop') && e.target !== searchInput) hideSearchPop();
+}, true);
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && searchPop && !searchPop.hidden) hideSearchPop();
+});
+
 
 /* --------------------------------------------- 待归属记录（v1.4） */
 /* 数据源：board_unassigned —— 业务行里「员工不在名单 / 已停用」或「来源窗口不明」的记录。
@@ -1676,6 +1928,7 @@ async function loadStats(opts) {
     state._statsSig = sig;
     state.stats = { consult, leads, at: Date.now() };
     renderStats();
+    renderKpiStrip();   // v1.12：今日留资/有效咨询到账后刷新摘要条
     return true;
   } catch (e) {
     if (!silent) $('#statSub').textContent = '读取失败：' + String(e.message || e);
@@ -2153,6 +2406,7 @@ function renderConflicts() {
   const list = [...state.agg.peers.values()]
     .filter((p) => p.agents.size > 1)
     .sort((x, y) => y.lastAt - x.lastAt);
+  bumpIf('conflict', list.length, 'details[data-fold="conflict"] > summary');   // v1.12：撞单增加时闪烁提醒
   sub.textContent = list.length ? list.length + ' 位粉丝被多人接待' : '';
   card.classList.toggle('alert', list.length > 0);
   if (!list.length) {
@@ -2360,7 +2614,7 @@ function renderLeads() {
       const a = r.agent_id || '(未命名)';
       const nm = r.peer_name
         ? ' <span class="nm2" title="' + esc(r.peer_name) + '">' + esc(r.peer_name) + '</span>' : '';
-      return '<tr>'
+      return '<tr data-peer="' + esc(r.peer_key || '') + '">'
         + '<td class="muted">' + esc(r.stat_date || '') + '</td>'
         + '<td><span class="tag"><span class="sw" style="background:' + agentColor(a) + '"></span>'
         + esc(a) + '</span></td>'
