@@ -393,6 +393,31 @@
   .banner.err{background:var(--red-soft);border-color:#fbd5d5;color:#991b1b}
   .banner.load{background:var(--blue-soft);border-color:#d5e2ff;color:#1e40af}
   .banner.warn{background:var(--amber-soft);border-color:#fde68a;color:#92400e}
+  /* ===== v1.13.3 全局告警条（P1-11）=====
+   * 断网 / 连续刷新失败时，页首固定一条红色细横条：不遮挡内容（文档流占位，
+   * 桌面端 sticky 吸顶），并给出「数据停留在几点」与「立即重试」。
+   * 窄屏不吸顶：手机上侧栏本身已 sticky 吸顶，两条同时粘住会互相压盖。 */
+  .netalert{
+    display:flex;align-items:center;gap:10px;
+    margin:0 0 14px;padding:9px 12px;
+    background:var(--red-soft);border:1px solid #fbd5d5;border-left:3px solid var(--red);
+    border-radius:10px;color:#991b1b;font-size:12.8px;line-height:1.5;
+    box-shadow:0 4px 14px rgba(220,38,38,.07)
+  }
+  .netalert[hidden]{display:none}
+  .netalert .na-ico{flex:none;font-size:14px;line-height:1}
+  .netalert .na-tx{flex:1;min-width:0}
+  .netalert .na-tx b{font-weight:650}
+  .netalert .na-tx .na-dim{color:#b91c1c;opacity:.8}
+  .netalert.ok{background:var(--green-soft);border-color:#bbf7d0;border-left-color:var(--green);color:#065f46}
+  .netalert .na-btn{
+    flex:none;appearance:none;cursor:pointer;font:inherit;font-size:12px;font-weight:600;
+    padding:4px 10px;border-radius:7px;background:#fff;color:#991b1b;
+    border:1px solid #f3d3d3;transition:background .12s,border-color .12s
+  }
+  .netalert .na-btn:hover{background:#fff1f1;border-color:#eab8b8}
+  .netalert .na-btn:disabled{opacity:.55;cursor:default}
+  @media (min-width:961px){ .netalert{position:sticky;top:0;z-index:35} }
   .foot{color:var(--tx3);font-size:12px;text-align:center;line-height:1.7;margin-top:6px}
   .foot code{background:#eceef2;padding:1px 5px;border-radius:4px;font-size:11.5px}
   /* ===== 员工咨询量（v1.2）===== */
@@ -499,7 +524,7 @@
     .side-foot .me{width:auto;border-radius:999px;padding:4px 4px 4px 10px}
     .datepop{left:auto; right:20px; top:calc(100% + 8px); width:300px}
   }
-  @media print{ .side,.seg,.btn,.me{display:none} body{background:#fff} #appView{padding-left:0} }
+  @media print{ .side,.seg,.btn,.me,.netalert{display:none} body{background:#fff} #appView{padding-left:0} }
 </style>
 </head>
 <body class="gate-locked">
@@ -659,6 +684,13 @@
   </nav>
 
   <div class="wrap">
+    <!-- v1.13.3 P1-11：全局告警条（断网 / 连续刷新失败）。默认隐藏，只在异常时出现，
+         恢复后先转绿提示 3 秒再自动消失。结构固定，只更新文字，避免重绘打断点击。 -->
+    <div class="netalert" id="netAlert" role="alert" aria-live="polite" hidden>
+      <span class="na-ico" id="naIco">⚠</span>
+      <div class="na-tx" id="naTx"></div>
+      <button class="na-btn" id="naRetry" type="button" title="立即重新拉取一次数据">立即重试</button>
+    </div>
     <div id="bannerBox"></div>
 
     <!-- v1.10 优先级重排：在线窗口置顶（唯一默认展开）；其余板块默认收起、点标题展开，
@@ -842,6 +874,8 @@
     </details>
 
     <div class="foot">
+      v1.13.3 全局告警条：断网或连续 2 次刷新失败时，页首固定一条红色细横条，写明「数据停留在几点」并可一键重试，
+      恢复后转绿提示 3 秒自动收起 ·<br>
       v1.13.2 数据陈旧度：每个板块标题行显示「· 数据 x 秒/分钟前」，超过预期刷新周期 3 倍仍没成功刷新会标红 ⚠，
       自动刷新关闭时不设超时（只显示多久没更新）·<br>
       v1.13.1 导出加固：留资 CSV 导出同样走服务端关键词（不受已加载页限制），按总数翻页拉全量、
@@ -1885,10 +1919,12 @@ function pollStat(text, bad) {
 function pollBusy() {
   /* v1.11.1 修复：recModal/drawer/pwdModal 用 classList 'on' 控制显隐（无 hidden
    * 属性），之前判 el.hidden 恒为 false → pollBusy 恒 true → autoTick 全被拦。
-   * datePop 才是真正的 hidden 属性。 */
+   * v1.13.3 修复：datePop 的判定漏了取反——它初始就带 hidden 属性，写成
+   * `datePop.hidden` 等于「面板关着就算忙」，自动刷新照样被整轮拦下。语义应是
+   * 「面板开着才让路」，故为 `!datePop.hidden`。 */
   return document.hidden || !Auth.token || $('#appView').hidden
     || $('#recModal').classList.contains('on') || $('#drawer').classList.contains('on')
-    || $('#pwdModal').classList.contains('on') || datePop.hidden;
+    || $('#pwdModal').classList.contains('on') || !datePop.hidden;
 }
 function pollMark(ok) {
   const d = new Date();
@@ -1900,6 +1936,7 @@ function pollMark(ok) {
     pollFailStreak++;
     pollStat(t + ' 刷新失败 · 已保留上次数据' + (pollFailStreak > 1 ? '（连续 ' + pollFailStreak + ' 次）' : ''), true);
   }
+  renderNetAlert();   // v1.13.3：每次得到刷新的成功/失败结果，立即同步全局告警条
 }
 
 /* ================= v1.13.2 数据陈旧度（P1-12） =================
@@ -1957,7 +1994,114 @@ function markFresh(k) {
 function resetFresh() {                            // 登出/换号：清掉时间戳，避免把旧账号的时间带进来
   for (let i = 0; i < FRESH_SRC.length; i++) freshAt[FRESH_SRC[i]] = 0;
   renderFresh();
+  resetNetAlert();                                 // v1.13.3：同时收起告警条，别把上个账号的异常带过去
 }
+
+/* ================= v1.13.3 全局告警条（P1-11） =================
+ * 目的：断网或连续刷新失败时，仅在侧栏用小字提示「已保留上次数据」等于没提示——
+ *       用户会对着过期数据继续回粉丝。这里在页首固定一条红色细横条，把「数据停在
+ *       几点」讲明白，并给一个「立即重试」。
+ * 触发：navigator.onLine === false（断网）或 pollFailStreak ≥ ALERT_FAIL_MIN（连续失败）。
+ * 恢复：不直接消失——先转绿报一次「连接已恢复 · 数据已更新到 X」，ALERT_HIDE_MS 后
+ *       自动收起，让用户知道刚才那次异常已经过去了。
+ * 不做的情况：自动刷新处于关闭档（pollSec = 0）时不告警——本来就不自动更新，
+ *       再报红只是噪音；板块级陈旧度已如实标注。
+ * 「数据停留在」取 5 个数据源里最旧的那个时刻：那才是用户真正在看的旧数字。 */
+const ALERT_FAIL_MIN = 2;                          // 连续失败到第 2 次才亮条，单次抖动不打扰
+const ALERT_HIDE_MS = 3000;                        // 恢复后停留时间
+let naHideTimer = 0, naShown = false;
+let naOnline = (typeof navigator === 'undefined' || navigator.onLine !== false);
+
+function naBaseTs() {
+  let min = 0;
+  for (let i = 0; i < FRESH_SRC.length; i++) {
+    const t = freshAt[FRESH_SRC[i]] || 0;
+    if (t && (!min || t < min)) min = t;
+  }
+  return min;
+}
+function fmtStuckAt(ts) {
+  if (!ts) return '还没有成功加载过数据';
+  const s = Math.max(0, Math.floor((Date.now() - ts) / 1000));
+  const d = new Date(ts);
+  const hm = pad2(d.getHours()) + ':' + pad2(d.getMinutes());
+  if (s < 60) return hm + '（刚刚）';
+  if (s < 3600) return hm + '（' + Math.floor(s / 60) + ' 分钟前）';
+  return hm + '（' + Math.floor(s / 3600) + ' 小时前）';
+}
+/* 纯计算：该不该告警、属于哪种原因。抽成无副作用函数，方便行为测试。 */
+function netAlertState() {
+  if (!pollSec) return { show: false, kind: '' };
+  if (!naOnline) return { show: true, kind: 'offline' };
+  if (pollFailStreak >= ALERT_FAIL_MIN) return { show: true, kind: 'fail' };
+  return { show: false, kind: '' };
+}
+function naNode(id) { return typeof $ === 'function' ? $(id) : null; }
+/* 渲染：结构固定在 HTML 里不动，只改图标/文案/配色，避免重建 DOM 打断「立即重试」的点击 */
+function renderNetAlert() {
+  const el = naNode('#netAlert');
+  if (!el) return;
+  const st = netAlertState();
+  if (st.show) {
+    if (naHideTimer) { clearTimeout(naHideTimer); naHideTimer = 0; }
+    naShown = true;
+    el.hidden = false;
+    el.classList.remove('ok');
+    const ico = naNode('#naIco'); if (ico) ico.textContent = '⚠';
+    const btn = naNode('#naRetry'); if (btn) btn.hidden = false;
+    const tx = naNode('#naTx');
+    if (tx) {
+      tx.innerHTML = st.kind === 'offline'
+        ? '<b>网络已断开</b> · 数据停留在 ' + esc(fmtStuckAt(naBaseTs()))
+          + '，<span class="na-dim">恢复联网后会自动继续刷新</span>'
+        : '<b>连续 ' + pollFailStreak + ' 次刷新失败</b> · 数据停留在 ' + esc(fmtStuckAt(naBaseTs()))
+          + '，<span class="na-dim">正在自动重试，页面保持上次数据</span>';
+    }
+    return;
+  }
+  if (!naShown || el.hidden) return;               // 本来没显示：不做任何 DOM 操作，防抖
+  if (!pollSec) {                                  // 切到关闭档：不报「已恢复」，直接收起
+    naShown = false;
+    el.hidden = true;
+    el.classList.remove('ok');
+    return;
+  }
+  if (!naHideTimer) {                              // 恢复：先转绿说一句，再 3 秒收起
+    el.classList.add('ok');
+    const ico = naNode('#naIco'); if (ico) ico.textContent = '✓';
+    const btn = naNode('#naRetry'); if (btn) btn.hidden = true;
+    const tx = naNode('#naTx');
+    if (tx) {
+      tx.innerHTML = '<b>连接已恢复</b> · 数据已更新到 ' + esc(fmtStuckAt(naBaseTs()))
+        + '，<span class="na-dim">继续自动刷新</span>';
+    }
+    naHideTimer = setTimeout(() => {
+      naHideTimer = 0; naShown = false;
+      const e2 = naNode('#netAlert');
+      if (e2) { e2.hidden = true; e2.classList.remove('ok'); }
+      const b2 = naNode('#naRetry'); if (b2) b2.hidden = false;
+    }, ALERT_HIDE_MS);
+  }
+}
+function resetNetAlert() {                         // 登出/换号：失败计数与告警条一起归零
+  pollFailStreak = 0;
+  naShown = false;
+  if (naHideTimer) { clearTimeout(naHideTimer); naHideTimer = 0; }
+  const el = naNode('#netAlert');
+  if (el) { el.hidden = true; el.classList.remove('ok'); }
+}
+if (typeof window !== 'undefined' && window.addEventListener) {
+  window.addEventListener('offline', () => { naOnline = false; renderNetAlert(); });
+  window.addEventListener('online', () => { naOnline = true; renderNetAlert(); });
+}
+$('#naRetry')?.addEventListener('click', () => {
+  const btn = $('#naRetry');
+  if (!btn || btn.disabled) return;
+  btn.disabled = true;                             // 连点保护：2 秒内不再触发
+  setTimeout(() => { const b = $('#naRetry'); if (b) b.disabled = false; }, 2000);
+  autoTick();                                      // 内部自带 pollBusy 关卡，弹窗/隐藏时自动跳过
+});
+
 async function autoTick() {
   if (pollBusy()) return;
   pollTick++;
@@ -1975,7 +2119,11 @@ function applyPollSetting() {
   const sel = $('#pollSec');
   if (sel) sel.value = String(pollSec);
   if (pollTimer) { clearInterval(pollTimer); pollTimer = 0; }
-  if (!pollSec) { pollStat('自动刷新已关闭'); return; }
+  if (!pollSec) {
+    pollStat('自动刷新已关闭');
+    renderNetAlert();                 // v1.13.3：关闭档不告警，切档后立刻把条收起来
+    return;
+  }
   pollStat('每 ' + (pollSec < 60 ? pollSec + ' 秒' : (pollSec / 60) + ' 分钟') + '自动刷新');
   pollTimer = setInterval(autoTick, pollSec * 1000);
 }
@@ -1994,6 +2142,7 @@ applyPollSetting();
 setInterval(() => {
   if (document.hidden || !Auth.token || $('#appView').hidden) return;
   renderFresh();                       // v1.13.2：陈旧度文案每 10 秒走一格（纯渲染，不发请求）
+  renderNetAlert();                    // v1.13.3：告警条里的「x 分钟前」同样跟着走
   if (document.activeElement === $('#onFilter')) return;
   if ((state.bindings || []).length) renderBindings();
 }, ONLINE_RERENDER_MS);
@@ -2002,7 +2151,7 @@ setInterval(() => {
  * （省资源，也让"隐藏时不重绘"的既有约定成立），不补这一下用户切回来会看到
  * 冻结的旧文案——纯渲染，不发请求，成本可忽略。 */
 document.addEventListener('visibilitychange', () => {
-  if (!document.hidden) renderFresh();
+  if (!document.hidden) { renderFresh(); renderNetAlert(); }
 });
 
 /* --------------------------------------------------------- 员工咨询量 */
