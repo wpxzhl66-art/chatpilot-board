@@ -235,6 +235,11 @@
   .card-h{display:flex;align-items:center;gap:10px;padding:14px 18px;border-bottom:1px solid var(--line2);flex-wrap:wrap}
   .card-h h2{margin:0;font-size:14px;font-weight:650;letter-spacing:.2px}
   .card-h .sub{color:var(--tx3);font-size:12.5px}
+  /* v1.13.2（P1-12）：板块数据陈旧度——统一在标题行显示「· 数据 x 秒/分钟前」，
+     超过预期刷新周期 3 倍仍无成功刷新时染红，避免用户把旧数据当实时数据看 */
+  .card-h .sub.fresh{font-variant-numeric:tabular-nums;white-space:nowrap}
+  .card-h .sub.fresh.stale{color:var(--red);font-weight:600}
+  .card-h .sub.fresh.stale::before{content:"⚠ ";font-weight:400}
   .card-b{padding:16px 18px}
 
   .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:16px}
@@ -681,6 +686,7 @@
       <summary class="card-h">
         <h2>接入记录</h2>
         <span class="sub" id="b3Sub"></span>
+        <span class="sub fresh" data-fresh="claims" style="display:none"></span>
         <span class="sub">按最近活动分桶显示，每列取每个粉丝最近的一行</span>
         <div class="grow"></div>
         <button class="btn primary" id="btnClaimAdd" style="display:none" title="手动登记一条接入记录">＋ 新增接入记录</button>
@@ -708,6 +714,7 @@
       <summary class="card-h">
         <h2>待归属记录</h2>
         <span class="sub" id="pendSub"></span>
+        <span class="sub fresh" data-fresh="unassigned" style="display:none"></span>
         <div class="grow"></div>
       </summary>
       <div class="card-b" style="padding-top:12px">
@@ -719,6 +726,7 @@
       <summary class="card-h">
         <h2>留资明细</h2>
         <span class="sub" id="leadSub"></span>
+        <span class="sub fresh" data-fresh="leads" style="display:none"></span>
         <div class="grow"></div>
         <!-- v1.13：关键词检索走服务端（board_leads.p_query），范围=整个历史结果集，
              不是只在已加载行里过滤；「加载更多」翻的是同一个关键词结果集。 -->
@@ -748,6 +756,7 @@
       <summary class="card-h">
         <h2>重复承接提醒</h2>
         <span class="sub" id="conflictSub"></span>
+        <span class="sub fresh" data-fresh="claims" style="display:none"></span>
         <div class="grow"></div>
         <button class="btn" id="btnConflictCsv">导出 CSV</button>
         <span class="sub" style="margin-left:8px">同一粉丝被多个客服接过会列在这里，点行可展开完整记录</span>
@@ -762,6 +771,7 @@
       <summary class="card-h">
         <h2>统计报表</h2>
         <span class="sub">接待粉丝 / 留资总量 / 有效咨询 / 每日趋势</span>
+        <span class="sub fresh" data-fresh="stats" style="display:none"></span>
         <div class="grow"></div>
       </summary>
       <div class="card-b">
@@ -798,6 +808,7 @@
       <summary class="card-h">
         <h2>接待排行与粉丝明细</h2>
         <span class="sub">点客服行可联动右侧明细</span>
+        <span class="sub fresh" data-fresh="claims" style="display:none"></span>
         <div class="grow"></div>
       </summary>
       <div class="card-b">
@@ -818,6 +829,7 @@
       <summary class="card-h">
         <h2>全部粉丝</h2>
         <span class="sub" id="allSub"></span>
+        <span class="sub fresh" data-fresh="claims" style="display:none"></span>
         <span class="sub" style="font-weight:400">低频板块 · 点标题展开</span>
       </summary>
       <div class="card-b" style="padding-top:12px">
@@ -830,6 +842,8 @@
     </details>
 
     <div class="foot">
+      v1.13.2 数据陈旧度：每个板块标题行显示「· 数据 x 秒/分钟前」，超过预期刷新周期 3 倍仍没成功刷新会标红 ⚠，
+      自动刷新关闭时不设超时（只显示多久没更新）·<br>
       v1.13.1 导出加固：留资 CSV 导出同样走服务端关键词（不受已加载页限制），按总数翻页拉全量、
       超单次上限时明确提示，文件名带关键词便于区分 ·<br>
       v1.13 留资关键词检索：留资明细输入关键词即按服务端全量检索（覆盖全部历史数据，不只是已加载行），「加载更多」翻的是同一个关键词结果集，导出 CSV 与筛选条件一致 ·<br>
@@ -991,6 +1005,8 @@ const Auth = {
   clear() {
     this.s = null;
     try { localStorage.removeItem(SESS_KEY); } catch { /* 忽略 */ }
+    /* v1.13.2：登出/换号清掉各板块的新鲜度时刻，避免把上一个账号的时间带到界面 */
+    if (typeof resetFresh === 'function') { try { resetFresh(); } catch (e) { /* 忽略 */ } }
   },
   get token() { return this.s && this.s.token || ''; },
   get role() { return this.s && this.s.role || 'viewer'; },
@@ -1214,6 +1230,7 @@ async function load(opts) {
       }
       recompute();
     }
+    markFresh('claims');            // v1.13.2：接入记录/撞单/排行/全部粉丝共用这个时刻
     return true;
   } catch (e) {
     if (silent) return false;   // 失败保留上一次有效数据，下一拍自动重试
@@ -1281,6 +1298,7 @@ async function loadBindings(opts) {
     const changed = JSON.stringify(rows) !== JSON.stringify(state.bindings);
     state.bindings = rows;
     state.bindingsAt = Date.now();
+    markFresh('bindings');                              // v1.13.2：在线窗口的刷新时刻
     if (silent && document.activeElement === $('#onFilter')) return true;
     if (changed || !silent) renderBindings();
     return true;
@@ -1791,6 +1809,7 @@ async function loadUnassigned(opts) {
     }
     const rows = Array.isArray(d.rows) ? d.rows : [];
     const changed = JSON.stringify(rows) !== JSON.stringify(state.unassigned);
+    markFresh('unassigned');                             // v1.13.2：待归属的刷新时刻
     if (silent && !changed) return true;                 // 没变化不重绘
     state.unassigned = rows;
     renderUnassigned();
@@ -1882,6 +1901,63 @@ function pollMark(ok) {
     pollStat(t + ' 刷新失败 · 已保留上次数据' + (pollFailStreak > 1 ? '（连续 ' + pollFailStreak + ' 次）' : ''), true);
   }
 }
+
+/* ================= v1.13.2 数据陈旧度（P1-12） =================
+ * 目的：静默自动刷新之后，用户必须能一眼判断「这个数字是不是新的」。
+ * 做法：5 个数据源各记录最后一次「成功拿到服务端响应」的时刻，板块标题行统一
+ *       显示「· 数据 x 秒/分钟前」；超过该源预期刷新周期 3 倍仍没成功 → 染红加 ⚠。
+ * 坑：stats / leads 是低频源（autoTick 每 POLL_DEEP_EVERY 拍才刷一次），
+ *     预期周期要乘 5，否则它们会永远显示超时。
+ * 失败不更新时刻（陈旧度自然增长），正好把「静默失败保留旧数据」暴露出来。
+ * 与 P1-11 告警条方向一致：本版先做板块级标注，全局告警条另做。 */
+const FRESH_SRC = ['claims', 'bindings', 'unassigned', 'stats', 'leads'];
+const FRESH_DEEP = { stats: 1, leads: 1 };        // 低频源：预期周期 × POLL_DEEP_EVERY
+const freshAt = { claims: 0, bindings: 0, unassigned: 0, stats: 0, leads: 0 };
+const FRESH_MIN_MS = 60 * 1000;                   // 阈值下限：防止档位=15 秒时抖一下就红
+
+function freshExpectMs(k) {
+  const base = (pollSec || 0) * 1000;
+  if (!base) return 0;                            // 自动刷新关闭：不设超时阈值
+  return base * (FRESH_DEEP[k] ? POLL_DEEP_EVERY : 1);
+}
+function fmtFresh(ms) {
+  const s = Math.max(0, Math.floor((Date.now() - ms) / 1000));
+  if (s < 5) return '数据 刚刚';
+  if (s < 60) return '数据 ' + s + ' 秒前';
+  if (s < 3600) return '数据 ' + Math.floor(s / 60) + ' 分钟前';
+  const d = new Date(ms);
+  return '数据 ' + pad2(d.getHours()) + ':' + pad2(d.getMinutes())
+    + '（' + Math.floor(s / 3600) + ' 小时前）';
+}
+/* 纯渲染：只改这些 span 的文案与样式，不碰板块内容，不发请求 */
+function renderFresh() {
+  const nodes = document.querySelectorAll('[data-fresh]');
+  for (let i = 0; i < nodes.length; i++) {
+    const el = nodes[i];
+    const k = el.getAttribute('data-fresh');
+    const t = freshAt[k] || 0;
+    if (!t) { el.textContent = ''; el.style.display = 'none'; el.classList.remove('stale'); continue; }
+    const exp = freshExpectMs(k);
+    const age = Date.now() - t;
+    const limit = exp > 0 ? Math.max(exp * 3, FRESH_MIN_MS) : 0;
+    el.textContent = '· ' + fmtFresh(t);
+    el.style.display = '';
+    el.classList.toggle('stale', limit > 0 && age > limit);
+    el.title = exp > 0
+      ? '本板块应每 ' + Math.round(exp / 1000) + ' 秒刷新一次；超过 '
+        + Math.round(limit / 1000) + ' 秒没成功会标红'
+      : '自动刷新已关闭：这段数据不会自动更新';
+  }
+}
+function markFresh(k) {
+  if (!(k in freshAt)) return;
+  freshAt[k] = Date.now();
+  renderFresh();
+}
+function resetFresh() {                            // 登出/换号：清掉时间戳，避免把旧账号的时间带进来
+  for (let i = 0; i < FRESH_SRC.length; i++) freshAt[FRESH_SRC[i]] = 0;
+  renderFresh();
+}
 async function autoTick() {
   if (pollBusy()) return;
   pollTick++;
@@ -1917,9 +1993,17 @@ applyPollSetting();
  * 展开中的下拉收起。 */
 setInterval(() => {
   if (document.hidden || !Auth.token || $('#appView').hidden) return;
+  renderFresh();                       // v1.13.2：陈旧度文案每 10 秒走一格（纯渲染，不发请求）
   if (document.activeElement === $('#onFilter')) return;
   if ((state.bindings || []).length) renderBindings();
 }, ONLINE_RERENDER_MS);
+
+/* v1.13.2：切回前台立刻把陈旧度文案走一格。页面在后台时 10 秒重渲染整轮跳过
+ * （省资源，也让"隐藏时不重绘"的既有约定成立），不补这一下用户切回来会看到
+ * 冻结的旧文案——纯渲染，不发请求，成本可忽略。 */
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden) renderFresh();
+});
 
 /* --------------------------------------------------------- 员工咨询量 */
 /* 数据源（v1.2）：consult_daily + lead_captures 两张统计表，经 board_stats
@@ -1955,6 +2039,7 @@ async function loadStats(opts) {
     const consult = Array.isArray(d.consult) ? d.consult : [];
     const leads = Array.isArray(d.leads) ? d.leads : [];
     const sig = JSON.stringify([consult, leads]);
+    markFresh('stats');                                 // v1.13.2：统计报表的刷新时刻（低频源）
     if (silent && sig === state._statsSig) return true;  // 没变化不重绘
     state._statsSig = sig;
     state.stats = { consult, leads, at: Date.now() };
@@ -2628,6 +2713,7 @@ async function loadLeads(more, opts) {
     }
     const rows = Array.isArray(d.rows) ? d.rows : [];
     const total = typeof d.total === 'number' ? d.total : rows.length;
+    markFresh('leads');                                   // v1.13.2：留资明细的刷新时刻（低频源）
     if (silent && !more) {
       const sig = JSON.stringify(rows);
       if (sig === L._sig && total === L.total) return true;   // 没变化不重绘
