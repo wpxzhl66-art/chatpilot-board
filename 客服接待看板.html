@@ -230,6 +230,8 @@
   details.card>summary::after{content:'▸';margin-left:auto;color:var(--tx3);font-size:13px;flex:none;transition:transform .15s}
   details.card[open]>summary::after{content:'▾'}
   details.card>summary:hover{background:#fafbfc}
+  /* v1.10：折叠板块默认收起——收起态去掉头底边线（其余板块参照 全部粉丝 的折叠卡样式） */
+  details.card:not([open])>summary{border-bottom:none}
   .card-h{display:flex;align-items:center;gap:10px;padding:14px 18px;border-bottom:1px solid var(--line2);flex-wrap:wrap}
   .card-h h2{margin:0;font-size:14px;font-weight:650;letter-spacing:.2px}
   .card-h .sub{color:var(--tx3);font-size:12.5px}
@@ -267,7 +269,7 @@
   .sc.b3idle{border-left:3px solid #d97706}
   .b3foot{font-size:11.5px;color:var(--tx3);padding:8px 14px;border-top:1px dashed var(--line)}
   /* 记录管理（v1.8）：三列板工具条 + 卡片行内操作 */
-  .b3bar{grid-column:1/-1;display:flex;align-items:center;gap:10px}
+  /* v1.8 记录管理：卡片行内操作（b3bar 工具条已并入折叠卡 summary，v1.10） */
   .sc .b3edit,.sc .b3del{cursor:pointer;user-select:none;font-size:11.5px;padding:2px 8px;border:1px solid var(--line);border-radius:6px;color:var(--tx2)}
   .sc .b3edit:hover{background:var(--card);color:var(--tx)}
   .sc .b3del:hover{background:var(--red-soft);color:#991b1b;border-color:#fbd5d5}
@@ -610,32 +612,8 @@
   <div class="wrap">
     <div id="bannerBox"></div>
 
-    <!-- 会话三列板（v2.0）：数据来自 board_claims 时间分桶。
-         「待接待（粉丝排队）」当前数据推不出来，第一列只放待归属，不造假数字。 -->
-    <section class="board3" id="board3">
-      <div class="b3bar">
-        <span class="b3t">接入记录</span>
-        <span class="sub">按最近活动分桶显示，每列取每个粉丝最近的一行</span>
-        <div class="grow"></div>
-        <button class="btn primary" id="btnClaimAdd" style="display:none" title="手动登记一条接入记录">＋ 新增接入记录</button>
-      </div>
-      <div class="b3col">
-        <div class="b3h"><span class="b3t">待处理</span><span class="b3n pend" id="nPend"></span></div>
-        <div class="b3list" id="bPend"></div>
-      </div>
-      <div class="b3col">
-        <div class="b3h"><span class="b3t">接待中</span><span class="b3n on" id="nActive"></span></div>
-        <div class="b3list" id="bActive"></div>
-      </div>
-      <div class="b3col">
-        <div class="b3h"><span class="b3t">待确认</span><span class="b3n idle" id="nIdle"></span></div>
-        <div class="b3list" id="bIdle"></div>
-        <div class="b3foot" id="bClosedNote" style="display:none"></div>
-      </div>
-    </section>
-
-    <section class="kpis" id="kpis"></section>
-
+    <!-- v1.10 优先级重排：在线窗口置顶（唯一默认展开）；其余板块默认收起、点标题展开，
+         展开状态记入 localStorage。收起时计数/副标题仍显示在标题行，数据照常加载。 -->
     <section class="card">
       <div class="card-h">
         <h2>在线窗口（员工 ↔ 浏览器）</h2>
@@ -651,36 +629,49 @@
       </div>
     </section>
 
-    <section class="card" id="pendCard">
-      <div class="card-h">
+    <!-- 接入记录（折叠）：会话三列板（v2.0），数据来自 board_claims 时间分桶。
+         「待接待（粉丝排队）」当前数据推不出来，第一列只放待归属，不造假数字。 -->
+    <details class="card" data-fold="claims">
+      <summary class="card-h">
+        <h2>接入记录</h2>
+        <span class="sub" id="b3Sub"></span>
+        <span class="sub">按最近活动分桶显示，每列取每个粉丝最近的一行</span>
+        <div class="grow"></div>
+        <button class="btn primary" id="btnClaimAdd" style="display:none" title="手动登记一条接入记录">＋ 新增接入记录</button>
+      </summary>
+      <div class="card-b">
+        <section class="board3" id="board3" style="margin-bottom:0">
+          <div class="b3col">
+            <div class="b3h"><span class="b3t">待处理</span><span class="b3n pend" id="nPend"></span></div>
+            <div class="b3list" id="bPend"></div>
+          </div>
+          <div class="b3col">
+            <div class="b3h"><span class="b3t">接待中</span><span class="b3n on" id="nActive"></span></div>
+            <div class="b3list" id="bActive"></div>
+          </div>
+          <div class="b3col">
+            <div class="b3h"><span class="b3t">待确认</span><span class="b3n idle" id="nIdle"></span></div>
+            <div class="b3list" id="bIdle"></div>
+            <div class="b3foot" id="bClosedNote" style="display:none"></div>
+          </div>
+        </section>
+      </div>
+    </details>
+
+    <details class="card" id="pendCard" data-fold="pend">
+      <summary class="card-h">
         <h2>待归属记录</h2>
         <span class="sub" id="pendSub"></span>
         <div class="grow"></div>
         <button class="btn" id="btnPendReload">刷新</button>
-      </div>
+      </summary>
       <div class="card-b" style="padding-top:12px">
         <div class="chart-scroll" id="pendWrap"></div>
       </div>
-    </section>
+    </details>
 
-    <section class="card">
-      <div class="card-h">
-        <h2>员工咨询量</h2>
-        <span class="sub" id="statSub"></span>
-        <div class="grow"></div>
-        <span class="seg" id="statMetric">
-          <button type="button" class="btn seg-b on" data-m="consult">有效咨询</button>
-          <button type="button" class="btn seg-b" data-m="leads">留资数</button>
-        </span>
-        <button class="btn" id="btnStatReload">刷新</button>
-      </div>
-      <div class="card-b" style="padding-top:12px">
-        <div class="chart-scroll" id="statWrap"></div>
-      </div>
-    </section>
-
-    <section class="card" id="leadCard">
-      <div class="card-h">
+    <details class="card" id="leadCard" data-fold="lead">
+      <summary class="card-h">
         <h2>留资明细</h2>
         <span class="sub" id="leadSub"></span>
         <div class="grow"></div>
@@ -695,51 +686,87 @@
         </select>
         <button class="btn" id="btnLeadReload">刷新</button>
         <button class="btn" id="btnLeadCsv">导出 CSV</button>
-      </div>
+      </summary>
       <div class="card-b" style="padding-top:10px">
         <div class="tbl-scroll" id="leadWrap" style="max-height:420px"></div>
         <div class="lead-more" id="leadMore" style="display:none">
           <button class="btn" id="btnLeadMore">加载更多</button>
         </div>
       </div>
-    </section>
+    </details>
 
-    <section class="card" id="conflictCard">
-      <div class="card-h">
+    <details class="card" id="conflictCard" data-fold="conflict">
+      <summary class="card-h">
         <h2>重复承接提醒</h2>
         <span class="sub" id="conflictSub"></span>
         <div class="grow"></div>
         <button class="btn" id="btnConflictCsv">导出 CSV</button>
         <span class="sub" style="margin-left:8px">同一粉丝被多个客服接过会列在这里，点行可展开完整记录</span>
-      </div>
+      </summary>
       <div class="card-b" style="padding-top:10px">
         <div class="tbl-scroll" id="conflictWrap" style="max-height:300px"></div>
       </div>
-    </section>
+    </details>
 
-    <section class="card">
-      <div class="card-h">
-        <h2>每日接待量</h2>
-        <span class="sub" id="chartSub"></span>
-        <div class="legend" id="legend"></div>
+    <!-- 统计报表（折叠）：KPI 总览 + 员工咨询量 + 每日接待量 -->
+    <details class="card" data-fold="stats">
+      <summary class="card-h">
+        <h2>统计报表</h2>
+        <span class="sub">接待粉丝 / 留资总量 / 有效咨询 / 每日趋势</span>
+        <div class="grow"></div>
+      </summary>
+      <div class="card-b">
+        <section class="kpis" id="kpis"></section>
+        <section class="card">
+          <div class="card-h">
+            <h2>员工咨询量</h2>
+            <span class="sub" id="statSub"></span>
+            <div class="grow"></div>
+            <span class="seg" id="statMetric">
+              <button type="button" class="btn seg-b on" data-m="consult">有效咨询</button>
+              <button type="button" class="btn seg-b" data-m="leads">留资数</button>
+            </span>
+            <button class="btn" id="btnStatReload">刷新</button>
+          </div>
+          <div class="card-b" style="padding-top:12px">
+            <div class="chart-scroll" id="statWrap"></div>
+          </div>
+        </section>
+        <section class="card" style="margin-bottom:0">
+          <div class="card-h">
+            <h2>每日接待量</h2>
+            <span class="sub" id="chartSub"></span>
+            <div class="legend" id="legend"></div>
+          </div>
+          <div class="card-b" style="padding-top:8px">
+            <div class="chart-scroll" id="chartWrap"></div>
+          </div>
+        </section>
       </div>
-      <div class="card-b" style="padding-top:8px">
-        <div class="chart-scroll" id="chartWrap"></div>
+    </details>
+
+    <!-- 接待排行与粉丝明细（折叠） -->
+    <details class="card" data-fold="rank">
+      <summary class="card-h">
+        <h2>接待排行与粉丝明细</h2>
+        <span class="sub">点客服行可联动右侧明细</span>
+        <div class="grow"></div>
+      </summary>
+      <div class="card-b">
+        <div class="split">
+          <section class="card" style="margin-bottom:0">
+            <div class="card-h"><h2>客服排行</h2><span class="sub" id="agentSub"></span></div>
+            <div class="alist" id="agentList"></div>
+          </section>
+          <section class="card" style="margin-bottom:0">
+            <div class="card-h"><h2 id="detailTitle">粉丝明细</h2><span class="sub" id="detailSub"></span></div>
+            <div class="tbl-scroll" id="detailWrap"></div>
+          </section>
+        </div>
       </div>
-    </section>
+    </details>
 
-    <div class="split">
-      <section class="card" style="margin-bottom:16px">
-        <div class="card-h"><h2>客服排行</h2><span class="sub" id="agentSub"></span></div>
-        <div class="alist" id="agentList"></div>
-      </section>
-      <section class="card" style="margin-bottom:16px">
-        <div class="card-h"><h2 id="detailTitle">粉丝明细</h2><span class="sub" id="detailSub"></span></div>
-        <div class="tbl-scroll" id="detailWrap"></div>
-      </section>
-    </div>
-
-    <details class="card" id="allCard">
+    <details class="card" id="allCard" data-fold="all">
       <summary class="card-h">
         <h2>全部粉丝</h2>
         <span class="sub" id="allSub"></span>
@@ -755,7 +782,8 @@
     </details>
 
     <div class="foot">
-      v1.9 侧边导航布局 · 记录管理（v1.8）：管理员可在「在线窗口 / 接入记录 / 留资明细」直接 新增 / 编辑 / 删除，操作全部写入服务端审计<br>
+      v1.10 优先级重排：在线窗口置顶（唯一默认展开），其余板块默认收起、点标题展开（展开状态本机记忆）<br>
+      记录管理（v1.8）：管理员可在「在线窗口 / 接入记录 / 留资明细」直接 新增 / 编辑 / 删除，操作全部写入服务端审计 ·
       数据经服务端校验后返回 · 每行代表「某客服在某台浏览器上接待过某位粉丝」 ·
       同一粉丝被 2 个及以上客服编号接待过，会在「重复承接提醒」中标红列出
     </div>
@@ -1342,6 +1370,10 @@ function renderBoard3() {
   const bca = document.getElementById('btnClaimAdd');
   if (bca) bca.style.display = Auth.isAdmin ? '' : 'none';   // v1.8：新增接入记录入口仅管理员可见
   const g = board3Buckets(now);
+  /* v1.10：折叠后计数仍要在标题行可见（收起态唯一的信息出口） */
+  const b3s = document.getElementById('b3Sub');
+  if (b3s) b3s.textContent = '待处理 ' + (state.unassigned || []).length
+    + ' · 接待中 ' + g.active.length + ' · 待确认 ' + g.idle.length;
   const pend = (state.unassigned || []).reduce((s, r) => s + Number(r.claims || 0), 0);
   const nPend = document.getElementById('nPend');
   if (nPend) nPend.textContent = (state.unassigned || []).length
@@ -1381,6 +1413,29 @@ document.getElementById('board3')?.addEventListener('click', (e) => {
   const cop = e.target && e.target.closest ? e.target.closest('[data-cop]') : null;
   if (cop && cop.dataset.cop) claimOp(cop.dataset.cop, cop.dataset.cid);
 });
+
+/* ============ v1.10 折叠板块（优先级重排） ============
+ * 在线窗口置顶且唯一默认展开；其余 details.card 默认收起。
+ * 1) summary 标题行里的按钮/筛选/输入不触发展开收起（点「刷新」不该把板块折上）；
+ * 2) 展开状态写入 localStorage（cp_board_fold_v1），下次进页还原用户习惯；
+ * 3) 数据加载与渲染不依赖展开状态——收起时计数/副标题仍显示在标题行。 */
+document.addEventListener('click', (e) => {
+  const sm = e.target && e.target.closest && e.target.closest('summary.card-h');
+  if (sm && e.target.closest('button,select,input,a,label')) e.preventDefault();
+}, true);
+
+const FOLD_KEY = 'cp_board_fold_v1';
+let foldState = {};
+try { foldState = JSON.parse(localStorage.getItem(FOLD_KEY) || '{}') || {}; }
+catch (e) { foldState = {}; }
+for (const d of document.querySelectorAll('details.card[data-fold]')) {
+  const k = d.getAttribute('data-fold');
+  if (k in foldState) d.open = !!foldState[k];
+  d.addEventListener('toggle', () => {
+    foldState[k] = d.open;
+    try { localStorage.setItem(FOLD_KEY, JSON.stringify(foldState)); } catch (e2) { /* 隐私模式忽略 */ }
+  });
+}
 
 /* --------------------------------------------- 待归属记录（v1.4） */
 /* 数据源：board_unassigned —— 业务行里「员工不在名单 / 已停用」或「来源窗口不明」的记录。
