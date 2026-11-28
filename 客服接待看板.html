@@ -720,6 +720,11 @@
         <h2>留资明细</h2>
         <span class="sub" id="leadSub"></span>
         <div class="grow"></div>
+        <!-- v1.13：关键词检索走服务端（board_leads.p_query），范围=整个历史结果集，
+             不是只在已加载行里过滤；「加载更多」翻的是同一个关键词结果集。 -->
+        <input id="leadQ" class="btn" style="min-width:200px;cursor:text"
+               placeholder="关键词：联系方式 / @ID / 昵称"
+               title="在全部历史留资中检索；输入后「加载更多」翻的也是关键词结果集" />
         <select id="leadAgent" class="btn" title="按客服筛选"><option value="">全部客服</option></select>
         <select id="leadType" class="btn" title="按类型筛选">
           <option value="">全部类型</option>
@@ -825,6 +830,7 @@
     </details>
 
     <div class="foot">
+      v1.13 留资关键词检索：留资明细输入关键词即按服务端全量检索（覆盖全部历史数据，不只是已加载行），「加载更多」翻的是同一个关键词结果集，导出 CSV 与筛选条件一致 ·<br>
       v1.12 盯盘效率：常驻 KPI 摘要条（今日接待/留资/有效咨询/新会话/待归属/撞单，点击跳转） · 全局搜索（侧栏搜粉丝/窗口/联系方式，直达并高亮） ·
       待处理/撞单增加时板块闪烁 + 浏览器标签页角标 (n) · 新会话队列（近 30 分钟有动静的未转正会话，纯现有数据推算）<br>
       搜索结果精确定位（v1.12.1）：留资行带唯一行 id 锚点，同一粉丝留了多条也能跳到对的那一行（搜索范围为已加载页，条数在结果底部明示） ·
@@ -1154,7 +1160,7 @@ const state = {
   expanded: new Set(), loading: false,
   bindings: [], bindingsAt: 0, bindFilter: '', unassigned: [],
   stats: { consult: [], leads: [], at: 0 }, statMetric: 'consult',
-  leads: { rows: [], total: 0, key: '', loading: false, agent: '', type: '', gen: 0, _sig: '' }
+  leads: { rows: [], total: 0, key: '', loading: false, agent: '', type: '', q: '', gen: 0, _sig: '', _pending: false }
 };
 
 const rowTime = (r) => state.metric === 'active' ? (r.last_active_at || r.first_seen_at) : (r.first_seen_at || r.last_active_at);
@@ -1694,8 +1700,13 @@ function renderSearchPop(list, q) {
         + '<span class="sp-sub">' + esc(r.who || '') + (r.t ? ' · ' + (esc(fmtAgo(r.t)) || '') : '') + '</span>'
         + '</button>').join('')
     : '<div class="sp-empty">没有匹配「' + esc(q.trim()) + '」的记录</div>';
+  /* v1.13：留资还没全量加载时，给一个直达入口——把关键词交给服务端检索全部历史数据，
+   * 而不是让用户以为「搜不到就是没有」 */
   if ((state.leads.total || 0) > state.leads.rows.length)
-    html += '<div class="sp-empty">留资明细仅搜索已加载的 ' + state.leads.rows.length + ' / ' + state.leads.total + ' 条</div>';
+    html += '<button type="button" class="sp-i sp-more" data-q="' + esc(q.trim()) + '">'
+      + '<b>在全部留资中检索「' + esc(q.trim()) + '」</b>'
+      + '<span class="sp-sub">已加载 ' + state.leads.rows.length + ' / ' + state.leads.total
+      + ' 条 · 点这里按关键词检索全部历史数据</span></button>';
   searchPop.innerHTML = html;
   searchPop.hidden = false;
 }
@@ -1730,6 +1741,18 @@ if (searchInput) {
 searchPop?.addEventListener('click', (e) => {
   const b = e.target.closest('.sp-i');
   if (!b) return;
+  /* v1.13：转服务端全量检索（关键词 → 留资卡输入框 → p_query） */
+  if (b.classList.contains('sp-more')) {
+    const q = b.dataset.q || '';
+    hideSearchPop();
+    const fold = document.querySelector('details[data-fold="lead"]');
+    if (fold) {
+      fold.open = true;
+      try { fold.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch (e2) { /* 忽略 */ }
+    }
+    setLeadQ(q);
+    return;
+  }
   const r = searchRes[Number(b.dataset.ri)];
   if (r) jumpToResult(r);
 });
@@ -2017,13 +2040,38 @@ let statTick = 0;   // v1.11 起轮询调度由 autoTick 接管
 $('#btnLeadMore').addEventListener('click', () => loadLeads(true));
 $('#btnLeadCsv').addEventListener('click', exportLeadsCsv);
 $('#btnConflictCsv').addEventListener('click', exportConflictsCsv);
+
+/* v1.13：留资关键词检索 —— 关键词交给服务端（board_leads.p_query）。
+ * 关键点：setLeadQ 会把 total 换成「整个关键词结果集」的条数，之后每次
+ * 「加载更多」都带着同一个 p_query 继续向后翻，所以范围覆盖全部历史数据，
+ * 而不是只在已加载的行里过滤。 */
+let leadQTimer = null;
+function setLeadQ(v) {
+  const L = state.leads;
+  const q = String(v || '').trim().slice(0, 60);
+  if (q === L.q) return;
+  L.q = q;
+  L.rows = []; L.total = 0; L.key = ''; L._sig = ''; L._renderSig = '';
+  const inp = $('#leadQ');
+  if (inp && inp.value !== q) inp.value = q;
+  queueLeadsReload();
+}
+$('#leadQ').addEventListener('input', (e) => {
+  clearTimeout(leadQTimer);
+  const v = e.target.value;
+  leadQTimer = setTimeout(() => setLeadQ(v), 350);   // 防抖：打字过程中不打云端
+});
+$('#leadQ').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') { clearTimeout(leadQTimer); setLeadQ(e.target.value); }
+});
+$('#leadQ').addEventListener('click', (e) => e.stopPropagation());
 $('#leadAgent').addEventListener('change', (e) => {
   state.leads.agent = e.target.value || '';
-  loadLeads(false);
+  queueLeadsReload();
 });
 $('#leadType').addEventListener('change', (e) => {
   state.leads.type = e.target.value || '';
-  loadLeads(false);
+  queueLeadsReload();
 });
 $('#leadWrap').addEventListener('click', (e) => {
   /* v1.8：删除按钮优先处理 */
@@ -2523,7 +2571,10 @@ const leadTypeText = (t) => LEAD_TYPE_TEXT[t] || t || '—';
 
 function leadScope() {
   const days = (state.days && state.days.length) ? state.days : scopeDays(state.rows);
-  return { from: days[0], to: days[days.length - 1], key: days[0] + '~' + days[days.length - 1] };
+  const q = String((state.leads && state.leads.q) || '').trim();
+  /* q 进 key：关键词变了必须重新按第一页拉取（服务端检索），
+   * 否则 syncLeads 会以为范围没变、继续显示旧关键词的结果 */
+  return { from: days[0], to: days[days.length - 1], q, key: days[0] + '~' + days[days.length - 1] + '|q=' + q };
 }
 function leadErrText(code) {
   if (code === 'bad_range') return '日期范围无效';
@@ -2562,7 +2613,8 @@ async function loadLeads(more, opts) {
     const d = await rpc('board_leads', {
       p_token: Auth.token, p_from: sc.from, p_to: sc.to,
       p_agent: L.agent || null, p_type: L.type || null,
-      p_limit: LEAD_PAGE, p_offset: more ? L.rows.length : 0
+      p_limit: LEAD_PAGE, p_offset: more ? L.rows.length : 0,
+      p_query: sc.q || null          // v1.13：关键词在服务端过滤，「加载更多」沿用同一个词
     });
     if (gen !== L.gen || (!more && sc.key !== leadScope().key)) return true;   // 迟到响应丢弃
     if (!d.ok) {
@@ -2593,25 +2645,39 @@ async function loadLeads(more, opts) {
     return undefined;
   } finally {
     L.loading = false;
+    /* v1.13：在途期间用户改过关键词/筛选 → 结束后补拉一次最新口径。
+     * 不加这段会被单飞锁吞掉，界面停留在旧关键词结果上。 */
+    if (L._pending) { L._pending = false; loadLeads(false); }
   }
+}
+
+/* 统一入口：在途则记一笔待补，空闲则立即拉 */
+function queueLeadsReload() {
+  const L = state.leads;
+  if (L.loading) { L._pending = true; return; }
+  loadLeads(false);
 }
 
 function renderLeads() {
   const L = state.leads, box = $('#leadWrap'), sub = $('#leadSub');
   fillLeadAgents();
   /* v1.11：内容没变不重绘（防自动刷新闪烁）；身份变会改操作列，一并入签名 */
-  const rsig = JSON.stringify([L.rows, L.total, Auth.isAdmin]);
+  const rsig = JSON.stringify([L.rows, L.total, Auth.isAdmin, L.q]);   // v1.13：关键词变化也要重绘标题行
   if (rsig === L._renderSig) return;
   L._renderSig = rsig;
   if (!L.rows.length) {
-    box.innerHTML = '<div class="empty">当前范围内没有留资记录'
-      + '<br><span style="opacity:.75">留资由扩展 v2.22.0+ 从粉丝消息里自动识别（WhatsApp / Telegram / IG / 邮箱 / 手机号）</span></div>';
-    sub.textContent = '';
+    box.innerHTML = L.q
+      ? '<div class="empty">没有匹配「' + esc(L.q) + '」的留资记录'
+        + '<br><span style="opacity:.75">已按全量历史数据检索（服务端），不是只在已显示行里过滤；换个关键词或清空输入框看全部</span></div>'
+      : '<div class="empty">当前范围内没有留资记录'
+        + '<br><span style="opacity:.75">留资由扩展 v2.22.0+ 从粉丝消息里自动识别（WhatsApp / Telegram / IG / 邮箱 / 手机号）</span></div>';
+    sub.textContent = L.q ? '关键词「' + L.q + '」· 匹配 0 条' : '';
     $('#leadMore').style.display = 'none';
     return;
   }
   const sc = leadScope();
-  sub.textContent = '共 ' + L.total + ' 条 · ' + sc.from + ' ~ ' + sc.to
+  sub.textContent = '共 ' + L.total + ' 条'
+    + (L.q ? '（关键词「' + L.q + '」）' : '') + ' · ' + sc.from + ' ~ ' + sc.to
     + (L.agent ? ' · ' + L.agent : '') + (L.type ? ' · ' + leadTypeText(L.type) : '');
   box.innerHTML = '<table><thead><tr><th>日期</th><th>客服</th><th>粉丝</th><th>类型</th>'
     + '<th>联系方式</th><th style="text-align:right">登记时间</th>'
@@ -2656,7 +2722,8 @@ async function fetchLeadsAll(cap) {
     const d = await rpc('board_leads', {
       p_token: Auth.token, p_from: sc.from, p_to: sc.to,
       p_agent: L.agent || null, p_type: L.type || null,
-      p_limit: 1000, p_offset: off
+      p_limit: 1000, p_offset: off,
+      p_query: sc.q || null          // 导出必须与当前关键词一致，否则导出的不是用户看到的筛选结果
     });
     if (!d.ok) throw new Error(leadErrText(d.error));
     const rows = Array.isArray(d.rows) ? d.rows : [];
@@ -2692,7 +2759,7 @@ async function exportLeadsCsv() {
     a.download = '留资明细_' + sc.from + '_' + sc.to + '.csv';
     a.click();
     setTimeout(() => URL.revokeObjectURL(a.href), 3000);
-    try { await rpc('board_log_export', { p_token: Auth.token, p_rows: rows.length, p_scope: 'leads ' + sc.from + '~' + sc.to }); } catch (e) {}
+    try { await rpc('board_log_export', { p_token: Auth.token, p_rows: rows.length, p_scope: 'leads ' + sc.from + '~' + sc.to + (sc.q ? ' q=' + sc.q : '') }); } catch (e) {}
   } catch (e) {
     alert('导出失败：' + String(e.message || e));
   } finally {
