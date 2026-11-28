@@ -830,6 +830,8 @@
     </details>
 
     <div class="foot">
+      v1.13.1 导出加固：留资 CSV 导出同样走服务端关键词（不受已加载页限制），按总数翻页拉全量、
+      超单次上限时明确提示，文件名带关键词便于区分 ·<br>
       v1.13 留资关键词检索：留资明细输入关键词即按服务端全量检索（覆盖全部历史数据，不只是已加载行），「加载更多」翻的是同一个关键词结果集，导出 CSV 与筛选条件一致 ·<br>
       v1.12 盯盘效率：常驻 KPI 摘要条（今日接待/留资/有效咨询/新会话/待归属/撞单，点击跳转） · 全局搜索（侧栏搜粉丝/窗口/联系方式，直达并高亮） ·
       待处理/撞单增加时板块闪烁 + 浏览器标签页角标 (n) · 新会话队列（近 30 分钟有动静的未转正会话，纯现有数据推算）<br>
@@ -2715,32 +2717,69 @@ function syncLeads() {
   else renderLeads();
 }
 
-async function fetchLeadsAll(cap) {
+/* ---------------------------------------------------------------------
+ * 导出 CSV（v1.13.1 加固）
+ * 关键词本来就走服务端（board_leads.p_query，v1.13 已落地），这里补三个缺口：
+ *   1) 口径以输入框为准：打完词立刻点导出时防抖（350ms）还没触发，
+ *      旧的 sc.q 还是上一个词 → 导出的不是眼前看到的筛选结果。
+ *   2) 按 total 翻页拉全量：旧实现 hard cap 5000，命中数超 5000 会被静默
+ *      截断且与界面「共 N 条」不符 → 现按 total 拉，超上限明确告知。
+ *   3) 文件名带关键词：不同关键词导出不再重名互相覆盖。
+ * ------------------------------------------------------------------- */
+const LEAD_EXPORT_MAX = 50000;
+
+/* 生效中的关键词：输入框是唯一真源（用户已输入但防抖未触发也算） */
+function leadEffQ() {
+  const inp = $('#leadQ');
+  if (inp) return String(inp.value || '').trim().slice(0, 60);
+  return String((state.leads && state.leads.q) || '').trim();
+}
+
+/* 拉取「当前关键词 + 当前筛选」下的全部命中行（服务端分页，不是前端过滤） */
+async function fetchLeadsAll(cap, onProgress) {
   const sc = leadScope(), L = state.leads, out = [];
-  let off = 0;
-  while (off < cap) {
+  const q = leadEffQ();
+  const limit = Math.max(1, Math.min(cap || LEAD_EXPORT_MAX, LEAD_EXPORT_MAX));
+  let off = 0, total = null;
+  for (;;) {
+    if (off >= limit) break;
     const d = await rpc('board_leads', {
       p_token: Auth.token, p_from: sc.from, p_to: sc.to,
       p_agent: L.agent || null, p_type: L.type || null,
       p_limit: 1000, p_offset: off,
-      p_query: sc.q || null          // 导出必须与当前关键词一致，否则导出的不是用户看到的筛选结果
+      p_query: q || null          // 导出必须与当前关键词一致，否则导出的不是用户看到的筛选结果
     });
     if (!d.ok) throw new Error(leadErrText(d.error));
     const rows = Array.isArray(d.rows) ? d.rows : [];
+    if (total === null) total = typeof d.total === 'number' ? d.total : rows.length;
     out.push(...rows);
     off += rows.length;
-    if (!rows.length || out.length >= (d.total || 0)) break;
+    if (onProgress) onProgress(out.length, total);
+    if (!rows.length || out.length >= total) break;
   }
-  return out;
+  const tot = (total === null ? out.length : total);
+  /* truncated=true：命中数超过导出上限，只拿到了前 limit 条 */
+  return { rows: out, total: tot, truncated: out.length < tot };
+}
+
+/* 文件名里的关键词：去掉路径/通配等非法字符，中文保留 */
+function csvNameSafe(s) {
+  return String(s || '').replace(/[\\/:*?"<>|\r\n\t]+/g, '_').trim().slice(0, 20);
 }
 
 async function exportLeadsCsv() {
   const btn = $('#btnLeadCsv');
+  /* 输入框里有尚未落地的词（防抖未触发）→ 先按它重置列表，保证「导出=所见」 */
+  const typed = leadEffQ();
+  if (typed !== String(state.leads.q || '')) { clearTimeout(leadQTimer); setLeadQ(typed); }
   btn.disabled = true;
   const old = btn.textContent;
   btn.textContent = '导出中…';
   try {
-    const rows = await fetchLeadsAll(5000);
+    const res = await fetchLeadsAll(LEAD_EXPORT_MAX, (n, t) => {
+      btn.textContent = '导出中… ' + n + (t ? '/' + t : '');
+    });
+    const rows = res.rows;
     const head = ['日期', '客服', '粉丝ID', '昵称', '类型', '联系方式', '登记时间'];
     const lines = [head.join(',')];
     for (const r of rows) {
@@ -2753,13 +2792,26 @@ async function exportLeadsCsv() {
       }).join(','));
     }
     const sc = leadScope();
+    const q = leadEffQ();
+    const suffix = csvNameSafe(q);
     const blob = new Blob(['\ufeff' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
-    a.download = '留资明细_' + sc.from + '_' + sc.to + '.csv';
+    a.download = '留资明细_' + sc.from + '_' + sc.to + (suffix ? '_' + suffix : '') + '.csv';
     a.click();
     setTimeout(() => URL.revokeObjectURL(a.href), 3000);
-    try { await rpc('board_log_export', { p_token: Auth.token, p_rows: rows.length, p_scope: 'leads ' + sc.from + '~' + sc.to + (sc.q ? ' q=' + sc.q : '') }); } catch (e) {}
+    try {
+      await rpc('board_log_export', {
+        p_token: Auth.token, p_rows: rows.length,
+        p_scope: 'leads ' + sc.from + '~' + sc.to + (q ? ' q=' + q : '')
+          + (res.truncated ? ' truncated=' + rows.length + '/' + res.total : '')
+      });
+    } catch (e) {}
+    if (res.truncated) {
+      alert('关键词「' + q + '」共匹配 ' + res.total + ' 条，超过单次导出上限 '
+        + LEAD_EXPORT_MAX + ' 条。\n本次已导出前 ' + rows.length + ' 条。\n'
+        + '请缩小日期范围或使用更精确的关键词后再导出。');
+    }
   } catch (e) {
     alert('导出失败：' + String(e.message || e));
   } finally {
