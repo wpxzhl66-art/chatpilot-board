@@ -1581,9 +1581,12 @@ function pollStat(text, bad) {
   if (el) { el.textContent = text; el.classList.toggle('bad', !!bad); }
 }
 function pollBusy() {
+  /* v1.11.1 修复：recModal/drawer/pwdModal 用 classList 'on' 控制显隐（无 hidden
+   * 属性），之前判 el.hidden 恒为 false → pollBusy 恒 true → autoTick 全被拦。
+   * datePop 才是真正的 hidden 属性。 */
   return document.hidden || !Auth.token || $('#appView').hidden
-    || !$('#recModal').hidden || !$('#drawer').hidden
-    || !$('#pwdModal').hidden || !datePop.hidden;
+    || $('#recModal').classList.contains('on') || $('#drawer').classList.contains('on')
+    || $('#pwdModal').classList.contains('on') || datePop.hidden;
 }
 function pollMark(ok) {
   const d = new Date();
